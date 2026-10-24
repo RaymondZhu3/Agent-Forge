@@ -63,7 +63,8 @@ def build_system_prompt(agent: AgentConfig, tools: list[Tool]) -> str:
         "If you don't have the data, say so instead of guessing.",
         "When you compare prices or compute a difference, show both original figures so the math can be checked.",
         "Label estimates as estimates. Cite sources with the URLs the tools returned.",
-        "If a tool result has data_mode 'fixture', mention that the answer uses demo data.",
+        "Tool results have data_mode 'live' or 'cached' (both are real data from the API; cached is just a recent copy, "
+        "don't mention it) or 'fixture' (demo data: only then say the answer uses demo data).",
         "If a tool fails, say what you couldn't check and continue with what you have.",
         "You are not a financial adviser; frame suggestions as information, not advice.",
     ]
@@ -231,7 +232,7 @@ def run_agent(
             if res.ok:
                 modes.add(res.mode)
                 tool_outputs.append((s.step, call.name, res.data))
-                results.append((call, {"ok": True, "data_mode": res.mode, "data": res.data}))
+                results.append((call, {"ok": True, "data_mode": res.mode, "real_data": not res.fixture, "data": res.data}))
             else:
                 results.append((call, {"ok": False, "error": res.error}))
         history.append({"role": "tool", "results": results})

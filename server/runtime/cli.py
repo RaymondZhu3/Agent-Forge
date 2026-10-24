@@ -40,6 +40,8 @@ def main() -> int:
     p.add_argument("--tools", action="store_true", help="list registered tools and exit")
     p.add_argument("--fact-check", choices=["flag", "block", "off"])
     p.add_argument("--json", action="store_true", help="print the full ChatResponse JSON")
+    p.add_argument("--without", action="append", default=[], metavar="TOOL",
+                   help="remove a tool from the agent (repeatable), e.g. --without serpapi_shopping")
     p.add_argument("--no-file-cache", action="store_true", help="don't persist tool results to tools/.cache/")
     a = p.parse_args()
 
@@ -62,6 +64,10 @@ def main() -> int:
     agent = AgentConfig(id=f"agent-{tpl.template}", status="deployed", **tpl.model_dump())
     if a.fact_check:
         agent.guardrails.fact_check = a.fact_check
+    unknown = set(a.without) - {t.name for t in agent.tools}
+    if unknown:
+        p.error(f"{agent.name} has no tool(s): {', '.join(sorted(unknown))}")
+    agent.tools = [t for t in agent.tools if t.name not in a.without]
 
     resp = run_agent(agent, a.message, session_id="cli")
     if a.json:

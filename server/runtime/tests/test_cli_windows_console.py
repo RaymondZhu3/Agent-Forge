@@ -47,3 +47,16 @@ def test_check_keys_prints_on_cp1252_console(monkeypatch):
     check_keys.check_serpapi()
     sys.stdout.flush()
     assert b"searches left: 247" in raw.getvalue()
+
+
+def test_cli_without_removes_tools(monkeypatch):
+    seen = {}
+
+    def fake_run(agent, *a, **k):
+        seen["tools"] = [t.name for t in agent.tools]
+        return ChatResponse(run_id="r", status="completed", assistant_message="ok")
+
+    monkeypatch.setattr(cli, "run_agent", fake_run)
+    monkeypatch.setattr(sys, "argv", ["cli", "smart_spend", "hi", "--without", "serpapi_shopping", "--no-file-cache"])
+    assert cli.main() == 0
+    assert "serpapi_shopping" not in seen["tools"] and "nessie_purchases" in seen["tools"]

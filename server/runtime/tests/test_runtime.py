@@ -174,3 +174,14 @@ def test_verify_does_not_call_a_cent_off_figure_exact():
     assert saving.verified and saving.how == "difference"
     _, claims, _ = verify_answer("You could save $108.50.", outputs, "flag")
     assert not claims[0].verified
+
+
+def test_model_is_told_cached_results_are_real_data():
+    """Live bug: the agent described cached SerpApi prices as "cached demo data"."""
+    from server.runtime.engine import build_system_prompt
+
+    llm = ScriptedLLM(LLMTurn("", [call("nessie_bills")], 1, 1), LLMTurn("done", [], 1, 1))
+    run_agent(agent(), "bills?", "s1", llm=llm)
+    assert llm.histories[1][-1]["results"][0][1]["real_data"] is False  # fixtures in tests
+    prompt = build_system_prompt(agent(), [])
+    assert "cached is just a recent copy" in prompt and "both are real data" in prompt
