@@ -187,6 +187,19 @@ def test_model_is_told_cached_results_are_real_data():
     assert "cached is just a recent copy" in prompt and "both are real data" in prompt
 
 
+def test_user_supplied_figures_can_be_used_but_are_flagged():
+    """Live rehearsal: told only to state tool figures, Gemini refused to use the user's "$199 on Amazon",
+    so the fact-check demo had nothing to flag. The model may use user figures; verify still flags them."""
+    from server.runtime.engine import build_system_prompt
+
+    assert "the $X you mentioned" in build_system_prompt(agent(), [])
+    outputs = [(2, "nessie_purchases", {"purchases": [{"amount": 249}, {"amount": 22}, {"amount": 28}]})]
+    text = "You paid $249 at Target. At the $199 you mentioned, you'd have saved $50."
+    _, claims, _ = verify_answer(text, outputs, "flag")
+    by = {c.text: c.verified for c in claims}
+    assert by == {"$249": True, "$199": False, "$50": False}
+
+
 def test_derived_figures_need_verified_operands_in_the_answer():
     """Live bug (tool removed, block mode): "$249 - $199 = $50" with a made-up $199 kept "$50" as verified,
     because two unrelated purchases summed to $50; "$60" was "verified" as some $5 purchase x 12."""

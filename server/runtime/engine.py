@@ -61,6 +61,8 @@ def build_system_prompt(agent: AgentConfig, tools: list[Tool]) -> str:
     rules = [
         "Only state facts, prices, totals and dates that appear in tool results from this conversation. "
         "If you don't have the data, say so instead of guessing.",
+        "If the user gives you a figure (e.g. a price someone quoted them), you may use it in your answer and math, "
+        "but attribute it to the user ('the $X you mentioned') and say whether your tools confirm it.",
         "When you compare prices or compute a difference, show both original figures so the math can be checked.",
         "Label estimates as estimates. Cite sources with the URLs the tools returned.",
         "Tool results have data_mode 'live' or 'cached' (both are real data from the API; cached is just a recent copy, "
