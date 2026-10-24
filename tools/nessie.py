@@ -71,7 +71,9 @@ def _get(path: str) -> Any:
     if res.status_code >= 500:  # api.nessieisreal.com answered 502 during HackTX
         raise NessieUnreachable(f"Nessie returned HTTP {res.status_code}")
     if res.status_code >= 400:
-        raise ToolError(f"Nessie returned HTTP {res.status_code}")
+        # Include Nessie's own (short) reason; the new api.nessieisreal.com returns validation details.
+        detail = " ".join(res.text.replace(os.environ["NESSIE_API_KEY"], "***").split())[:160]
+        raise ToolError(f"Nessie returned HTTP {res.status_code}" + (f": {detail}" if detail else ""))
     return res.json()
 
 

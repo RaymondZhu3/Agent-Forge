@@ -173,3 +173,20 @@ def test_shopping_keeps_only_comparable_new_listings_from_real_results(monkeypat
 
     mouse = tool.run({"query": "Logitech MX Master 3S"}).data
     assert mouse["products"] == [] and mouse["lowest_price"] is None
+
+
+def test_nessie_4xx_error_includes_reason_without_key(monkeypatch):
+    """Live: GET purchases returned HTTP 400 and the reason was hidden."""
+    from tools import nessie
+
+    monkeypatch.setenv("NESSIE_API_KEY", "secret-key")
+    monkeypatch.delenv("NESSIE_MOCK", raising=False)
+    monkeypatch.setattr(nessie, "_offline_until", 0.0)
+
+    class R:
+        status_code = 400
+        text = '{"detail": "bad merchant_id for key secret-key"}'
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
+    r = registry.get("nessie_accounts").run({}, {"customer_id": "c1"})
+    assert not r.ok and "bad merchant_id" in r.error and "secret-key" not in r.error
