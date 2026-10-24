@@ -73,5 +73,6 @@ def test_cli_uses_ascii_minus_on_cp1252_console():
 
     cp1252 = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
     assert _console_text("$249.00 \u2212 $199.00 = $50.00", cp1252) == "$249.00 - $199.00 = $50.00"
+    assert _console_text("October 21\u201322", cp1252) == "October 21-22"  # cp1252 CAN encode it; still ASCII
     utf8 = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
     assert _console_text("a \u2212 b", utf8) == "a \u2212 b"

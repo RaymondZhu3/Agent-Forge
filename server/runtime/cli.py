@@ -33,13 +33,10 @@ _ASCII = str.maketrans({"\u2212": "-", "\u2013": "-", "\u2014": "-", "\u2018": "
 
 
 def _console_text(text: str, stream=None) -> str:
-    """Swap typographic characters for ASCII when the console can't encode them."""
-    enc = getattr(stream or sys.stdout, "encoding", None) or "utf-8"
-    try:
-        text.encode(enc)
-        return text
-    except (UnicodeEncodeError, LookupError):
-        return text.translate(_ASCII)
+    """Swap typographic characters for ASCII unless the console is UTF-8. Live 5:48 PM: piped through
+    Tee-Object, a cp1252 en dash (0x96) was read back by PowerShell's OEM codepage as "u-circumflex"."""
+    enc = (getattr(stream or sys.stdout, "encoding", None) or "utf-8").lower().replace("-", "")
+    return text if enc in ("utf8", "utf8sig") else text.translate(_ASCII)
 
 
 def main() -> int:
