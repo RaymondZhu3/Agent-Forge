@@ -54,9 +54,12 @@ def test_cli_without_removes_tools(monkeypatch):
 
     def fake_run(agent, *a, **k):
         seen["tools"] = [t.name for t in agent.tools]
+        seen["instructions"] = agent.instructions
         return ChatResponse(run_id="r", status="completed", assistant_message="ok")
 
     monkeypatch.setattr(cli, "run_agent", fake_run)
-    monkeypatch.setattr(sys, "argv", ["cli", "smart_spend", "hi", "--without", "serpapi_shopping", "--no-file-cache"])
+    monkeypatch.setattr(sys, "argv", ["cli", "smart_spend", "hi", "--without", "serpapi_shopping",
+                                     "--instructions", "Estimate prices.", "--no-file-cache"])
     assert cli.main() == 0
     assert "serpapi_shopping" not in seen["tools"] and "nessie_purchases" in seen["tools"]
+    assert seen["instructions"] == "Estimate prices."
