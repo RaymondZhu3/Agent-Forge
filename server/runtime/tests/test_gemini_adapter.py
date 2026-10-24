@@ -61,3 +61,42 @@ def test_client_has_timeout_and_gemini3_uses_low_thinking(monkeypatch):
         llm.generate(m, "sys", [{"role": "user", "text": "hi"}], [])
     assert seen["gemini-3.8-flash"].thinking_config.thinking_level == "LOW"
     assert seen["gemini-2.5-flash"].thinking_config is None
+
+
+def test_overloaded_model_retries_then_falls_back(monkeypatch):
+    """Real-data bug: gemini-3.8-flash returned 503 'high demand' and the whole run failed."""
+    from google.genai import errors
+
+    llm = GeminiLLM(api_key="fake")
+    llm._sleep = lambda s: None
+    tried = []
+
+    def fake_generate(model, contents, config):
+        tried.append(model)
+        if model == "gemini-3.8-flash":
+            raise errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
+        return make_resp([types.Part(text="ok")])
+
+    monkeypatch.setattr(llm._client.models, "generate_content", fake_generate)
+    turn = llm.generate("gemini-3.8-flash", "sys", [{"role": "user", "text": "hi"}], [])
+    assert turn.text == "ok"
+    assert tried == ["gemini-3.8-flash", "gemini-3.8-flash", "gemini-3.7-flash"]
+
+
+def test_non_overload_errors_do_not_fall_back(monkeypatch):
+    import pytest
+    from google.genai import errors
+
+    from server.runtime.llm import LLMError
+
+    llm = GeminiLLM(api_key="fake")
+    tried = []
+
+    def fake_generate(model, contents, config):
+        tried.append(model)
+        raise errors.ClientError(404, {"error": {"code": 404, "message": "no longer available", "status": "NOT_FOUND"}})
+
+    monkeypatch.setattr(llm._client.models, "generate_content", fake_generate)
+    with pytest.raises(LLMError, match="404"):
+        llm.generate("gemini-2.5-flash", "sys", [{"role": "user", "text": "hi"}], [])
+    assert tried == ["gemini-2.5-flash"]

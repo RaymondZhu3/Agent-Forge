@@ -10,6 +10,7 @@ candidate content to history unchanged so thought signatures are preserved.
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -51,6 +52,15 @@ class LLMError(Exception):
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
 # A Gemini call with no timeout hung a live CLI run for minutes; fail the step instead.
 LLM_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S") or 60)
+FALLBACK_MODELS = [m.strip() for m in (os.getenv("GEMINI_FALLBACK_MODELS") or "gemini-3.7-flash,gemini-3.5-flash").split(",") if m.strip()]
+RETRY_DELAY_S = 1.5
+
+
+def _overloaded(e: Exception) -> bool:
+    """503 UNAVAILABLE / 429 RESOURCE_EXHAUSTED: worth retrying or switching model; anything else isn't."""
+    code = getattr(e, "code", None) or getattr(e, "status_code", None)
+    text = str(e)
+    return code in (429, 503) or "UNAVAILABLE" in text or "RESOURCE_EXHAUSTED" in text
 
 
 class GeminiLLM:
@@ -62,6 +72,7 @@ class GeminiLLM:
             raise LLMError("GEMINI_API_KEY is not set")
         from google.genai import types
 
+        self._sleep = time.sleep
         self._client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=int(LLM_TIMEOUT_S * 1000)))
 
     def generate(self, model: str, system: str, history: History, tools: list[Tool]) -> LLMTurn:
@@ -92,20 +103,37 @@ class GeminiLLM:
                 d["parameters_json_schema"] = t.parameters
             decls.append(types.FunctionDeclaration(**d))
 
-        config = types.GenerateContentConfig(
-            system_instruction=system,
-            tools=[types.Tool(function_declarations=decls)] if decls else None,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-            temperature=0.2,
-            # Gemini 3 models think by default; "low" keeps tool-calling turns fast.
-            thinking_config=types.ThinkingConfig(thinking_level="low") if model.startswith("gemini-3") else None,
-        )
-        try:
-            resp = self._client.models.generate_content(model=model, contents=contents, config=config)
-        except Exception as e:  # SDK raises various errors; keep internals out of user-facing text
-            if "timeout" in type(e).__name__.lower() or "timed out" in str(e).lower():
-                raise LLMError(f"Gemini did not answer within {LLM_TIMEOUT_S:.0f}s") from e
-            raise LLMError(f"Gemini request failed ({type(e).__name__}: {str(e)[:200]})") from e
+        def config_for(m: str) -> types.GenerateContentConfig:
+            return types.GenerateContentConfig(
+                system_instruction=system,
+                tools=[types.Tool(function_declarations=decls)] if decls else None,
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                temperature=0.2,
+                # Gemini 3 models think by default; "low" keeps tool-calling turns fast.
+                thinking_config=types.ThinkingConfig(thinking_level="low") if m.startswith("gemini-3") else None,
+            )
+
+        # Live runs hit 503 "high demand" on the newest Flash: retry once, then try the fallback models.
+        candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
+        last: Exception | None = None
+        resp = None
+        for i, m in enumerate(candidates):
+            for attempt in range(2):
+                try:
+                    resp = self._client.models.generate_content(model=m, contents=contents, config=config_for(m))
+                    break
+                except Exception as e:  # SDK raises various errors; keep internals out of user-facing text
+                    if "timeout" in type(e).__name__.lower() or "timed out" in str(e).lower():
+                        raise LLMError(f"Gemini did not answer within {LLM_TIMEOUT_S:.0f}s") from e
+                    last = e
+                    if not _overloaded(e):
+                        raise LLMError(f"Gemini request failed ({type(e).__name__}: {str(e)[:200]})") from e
+                    if attempt == 0:
+                        self._sleep(RETRY_DELAY_S)
+            if resp is not None:
+                break
+        if resp is None:
+            raise LLMError(f"Gemini is overloaded; tried {', '.join(candidates)} ({str(last)[:120]})") from last
 
         cand = (resp.candidates or [None])[0]
         content = cand.content if cand else None
