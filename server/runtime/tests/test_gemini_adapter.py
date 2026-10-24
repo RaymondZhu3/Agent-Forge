@@ -84,6 +84,28 @@ def test_overloaded_model_retries_then_falls_back(monkeypatch):
     assert turn.model == "gemini-3.7-flash" and len(turn.attempts) == 2 and "503" in turn.attempts[0]
 
 
+def test_all_models_overloaded_gets_one_more_round(monkeypatch):
+    """Live 5:20 PM: 3.5 and 3.7 both 503'd within seconds and the demo run failed."""
+    from google.genai import errors
+
+    llm = GeminiLLM(api_key="fake")
+    sleeps = []
+    llm._sleep = sleeps.append
+    tried = []
+
+    def fake_generate(model, contents, config):
+        tried.append(model)
+        if len(tried) <= 6:
+            raise errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
+        return make_resp([types.Part(text="ok")])
+
+    monkeypatch.setattr(llm._client.models, "generate_content", fake_generate)
+    turn = llm.generate("gemini-3.5-flash", "sys", [{"role": "user", "text": "hi"}], [])
+    assert turn.text == "ok" and turn.model == "gemini-3.5-flash"
+    assert set(tried[:6]) == {"gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"}
+    assert 4.0 in sleeps
+
+
 def test_non_overload_errors_do_not_fall_back(monkeypatch):
     import pytest
     from google.genai import errors

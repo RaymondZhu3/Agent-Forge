@@ -54,8 +54,10 @@ class LLMError(Exception):
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
 # A Gemini call with no timeout hung a live CLI run for minutes; fail the step instead.
 LLM_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S") or 60)
-FALLBACK_MODELS = [m.strip() for m in (os.getenv("GEMINI_FALLBACK_MODELS") or "gemini-3.7-flash,gemini-3.5-flash").split(",") if m.strip()]
+FALLBACK_MODELS = [m.strip() for m in (os.getenv("GEMINI_FALLBACK_MODELS") or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.5-flash").split(",") if m.strip()]
 RETRY_DELAY_S = 1.5
+# Live 5:20 PM: 3.5 and 3.7 both 503'd within seconds and the run failed; spikes are short, so one more round.
+SECOND_ROUND_DELAY_S = 4.0
 
 
 def _overloaded(e: Exception) -> bool:
@@ -121,8 +123,10 @@ class GeminiLLM:
         resp = None
         used = model
         attempts: list[str] = []
-        for i, m in enumerate(candidates):
-            for attempt in range(2):
+        for i, m in enumerate(candidates + candidates):
+            if i == len(candidates):
+                self._sleep(SECOND_ROUND_DELAY_S)
+            for attempt in range(2 if i < len(candidates) else 1):
                 t0 = time.perf_counter()
                 try:
                     resp = self._client.models.generate_content(model=m, contents=contents, config=config_for(m))

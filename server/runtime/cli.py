@@ -87,7 +87,11 @@ def main() -> int:
     if resp.claims:
         ok = sum(c.verified for c in resp.claims)
         print(f"Fact-check: {ok}/{len(resp.claims)} figures verified" + (" (blocked)" if resp.blocked else ""))
+        shown = set()
         for c in resp.claims:
+            if (c.text, c.verified) in shown:  # a figure repeated in the answer is one line here
+                continue
+            shown.add((c.text, c.verified))
             mark = "ok" if c.verified else " X"
             src = f"step {c.source_step} {c.source_tool} ({c.how})" if c.verified else "no matching tool data"
             print(f"  {mark} {c.text:>12}  {src}")
