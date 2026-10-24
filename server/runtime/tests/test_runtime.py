@@ -154,7 +154,7 @@ def test_news_monitor_runs_on_same_runtime():
 
 def test_verify_percent_and_annualized():
     outputs = [(2, "nessie_bills", {"amount": 24.99}), (3, "serpapi_shopping", {"products": [{"price": 249.0}, {"price": 189.99}]})]
-    _, claims, _ = verify_answer("That's $299.88 a year, and 24% cheaper.", outputs, "flag")
+    _, claims, _ = verify_answer("Netflix is $24.99 a month, that's $299.88 a year, and 24% cheaper.", outputs, "flag")
     by = {c.text: c for c in claims}
     assert by["$299.88"].verified and by["$299.88"].how == "annualized"
     assert by["24%"].verified
@@ -185,3 +185,20 @@ def test_model_is_told_cached_results_are_real_data():
     assert llm.histories[1][-1]["results"][0][1]["real_data"] is False  # fixtures in tests
     prompt = build_system_prompt(agent(), [])
     assert "cached is just a recent copy" in prompt and "both are real data" in prompt
+
+
+def test_derived_figures_need_verified_operands_in_the_answer():
+    """Live bug (tool removed, block mode): "$249 - $199 = $50" with a made-up $199 kept "$50" as verified,
+    because two unrelated purchases summed to $50; "$60" was "verified" as some $5 purchase x 12."""
+    outputs = [(2, "nessie_purchases", {"purchases": [{"amount": 249}, {"amount": 28}, {"amount": 22}, {"amount": 5}]})]
+    text = "You paid $249. Elsewhere about $199: $249 - $199 = $50 saved, or $60 a year."
+    out, claims, blocked = verify_answer(text, outputs, "block")
+    by = {c.text: c for c in claims}
+    assert by["$249"].verified and not by["$199"].verified
+    assert not by["$50"].verified and not by["$60"].verified
+    assert "$50" not in out and blocked
+
+    # a real saving between two stated, verified figures still verifies
+    outputs.append((4, "serpapi_shopping", {"lowest_price": 139.99}))
+    _, claims, _ = verify_answer("Paid $249.00, now $139.99: save $109.01.", outputs, "flag")
+    assert {c.text: c.how for c in claims}["$109.01"] == "difference"

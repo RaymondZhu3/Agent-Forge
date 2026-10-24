@@ -96,7 +96,10 @@ def _match(value: float, evidence: list[Evidence], percent: bool) -> tuple[Evide
 
 
 def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tuple[int, int]]]:
-    found: list[tuple[Claim, tuple[int, int]]] = []
+    """Two passes. 1) exact matches against tool data. 2) derived money figures (difference, sum, x12) only from
+    figures the answer itself states AND that passed pass 1. Live bug: "$249 - $199 = $50" (with $199 made up)
+    was "verified" because two unrelated purchases happened to sum to $50."""
+    hits: list[tuple[re.Match, bool, float]] = []
     seen: set[tuple[str, int]] = set()
     for regex, percent in ((MONEY_RE, False), (PCT_RE, True)):
         for m in regex.finditer(answer):
@@ -104,19 +107,37 @@ def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tupl
             if key in seen:
                 continue
             seen.add(key)
-            value = float(m.group(1).replace(",", ""))
-            ev, how = _match(value, evidence, percent)
-            found.append((
-                Claim(
-                    text=m.group(0).strip(),
-                    context=_sentence(answer, m.start(), m.end()),
-                    verified=ev is not None,
-                    source_step=ev.step if ev else None,
-                    source_tool=ev.tool if ev else None,
-                    how=how,
-                ),
-                (m.start(), m.end()),
-            ))
+            hits.append((m, percent, float(m.group(1).replace(",", ""))))
+
+    exact: dict[int, Evidence] = {}
+    for i, (_, percent, value) in enumerate(hits):
+        ev = next((e for e in evidence if abs(e.value - value) <= TOL), None)
+        if ev is not None:
+            exact[i] = ev
+    stated: list[Evidence] = []
+    for i, ev in exact.items():
+        if not hits[i][1] and all(abs(x.value - ev.value) > TOL for x in stated):
+            stated.append(Evidence(hits[i][2], ev.step, ev.tool))
+
+    found: list[tuple[Claim, tuple[int, int]]] = []
+    for i, (m, percent, value) in enumerate(hits):
+        if i in exact:
+            ev, how = exact[i], "exact"
+        elif percent:
+            ev, how = _match(value, evidence, True)
+        else:
+            ev, how = _match(value, stated, False)
+        found.append((
+            Claim(
+                text=m.group(0).strip(),
+                context=_sentence(answer, m.start(), m.end()),
+                verified=ev is not None,
+                source_step=ev.step if ev else None,
+                source_tool=ev.tool if ev else None,
+                how=how,
+            ),
+            (m.start(), m.end()),
+        ))
     found.sort(key=lambda c: c[1][0])
     return found
 
