@@ -18,6 +18,7 @@ Env: NESSIE_API_KEY (missing -> labeled fixtures), NESSIE_BASE_URL, NESSIE_MOCK=
 from __future__ import annotations
 
 import os
+import time
 from collections import defaultdict
 from typing import Any
 
@@ -34,8 +35,22 @@ CUSTOMER_SETTING = {
 }
 
 
+# When Nessie can't be reached (hackathon Wi-Fi, outage), serve labeled fixtures for a minute, then retry.
+# NESSIE_FALLBACK=0 turns this off (tools then fail with "Could not reach Nessie").
+OFFLINE_RETRY_S = 60
+_offline_until = 0.0
+
+
+class NessieUnreachable(ToolError):
+    pass
+
+
 def _use_fixtures() -> bool:
-    return not os.getenv("NESSIE_API_KEY") or os.getenv("NESSIE_MOCK") == "1"
+    return (
+        not os.getenv("NESSIE_API_KEY")
+        or os.getenv("NESSIE_MOCK") == "1"
+        or _offline_until > time.time()
+    )
 
 
 def _base() -> str:
@@ -46,9 +61,9 @@ def _get(path: str) -> Any:
     try:
         res = httpx.get(f"{_base()}{path}", params={"key": os.environ["NESSIE_API_KEY"]}, timeout=TIMEOUT_S)
     except httpx.TimeoutException:
-        raise ToolError("Nessie timed out")
+        raise NessieUnreachable("Nessie timed out")
     except httpx.HTTPError:
-        raise ToolError("Could not reach Nessie")
+        raise NessieUnreachable("Could not reach Nessie")
     if res.status_code == 404:
         raise ToolError("Nessie record not found (check customer_id)")
     if res.status_code in (401, 403):
@@ -61,11 +76,18 @@ def _get(path: str) -> Any:
 # ---- data access (live or fixture), returns (value, fixture) ----
 
 def _customer(customer_id: str | None) -> tuple[dict[str, Any], bool]:
+    global _offline_until
     if _use_fixtures():
         return fx.DEMO_CUSTOMER, True
-    if customer_id:
-        return _get(f"/customers/{customer_id}"), False
-    customers = _get("/customers")
+    try:
+        if customer_id:
+            return _get(f"/customers/{customer_id}"), False
+        customers = _get("/customers")
+    except NessieUnreachable:
+        if os.getenv("NESSIE_FALLBACK") == "0":
+            raise
+        _offline_until = time.time() + OFFLINE_RETRY_S
+        return fx.DEMO_CUSTOMER, True
     if not customers:
         raise ToolError("No Nessie customers exist yet (run the seed script)")
     return customers[0], False

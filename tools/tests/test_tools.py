@@ -118,3 +118,31 @@ def test_custom_cache_backend(monkeypatch):
         assert len(store) == 1 and next(iter(store)).startswith("serpapi_local_places:")
     finally:
         cache_mod.set_cache_backend(cache_mod._mem_get, cache_mod._mem_set)
+
+
+def test_nessie_unreachable_falls_back_to_labeled_fixtures(monkeypatch):
+    """Real-data bug: hackathon network couldn't reach Nessie, so every Smart Spend tool failed."""
+    from tools import nessie
+
+    calls = []
+
+    def down(*a, **k):
+        calls.append(a)
+        raise httpx.ConnectError("no route")
+
+    monkeypatch.setenv("NESSIE_API_KEY", "k")
+    monkeypatch.delenv("NESSIE_MOCK", raising=False)
+    monkeypatch.delenv("NESSIE_FALLBACK", raising=False)
+    monkeypatch.setattr(nessie, "_offline_until", 0.0)
+    monkeypatch.setattr(httpx, "get", down)
+    r = registry.get("nessie_purchases").run({})
+    assert r.ok and r.fixture and r.mode == "fixture"
+    n = len(calls)
+    assert registry.get("nessie_bills").run({}).mode == "fixture"
+    assert len(calls) == n  # stays offline for a minute instead of retrying every call
+
+    monkeypatch.setattr(nessie, "_offline_until", 0.0)
+    monkeypatch.setenv("NESSIE_FALLBACK", "0")
+    r = registry.get("nessie_purchases").run({})
+    assert not r.ok and "reach Nessie" in (r.error or "")
+    monkeypatch.setattr(nessie, "_offline_until", 0.0)
