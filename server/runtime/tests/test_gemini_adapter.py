@@ -81,6 +81,7 @@ def test_overloaded_model_retries_then_falls_back(monkeypatch):
     turn = llm.generate("gemini-3.8-flash", "sys", [{"role": "user", "text": "hi"}], [])
     assert turn.text == "ok"
     assert tried == ["gemini-3.8-flash", "gemini-3.8-flash", "gemini-3.7-flash"]
+    assert turn.model == "gemini-3.7-flash" and len(turn.attempts) == 2 and "503" in turn.attempts[0]
 
 
 def test_non_overload_errors_do_not_fall_back(monkeypatch):

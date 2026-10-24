@@ -31,6 +31,8 @@ class LLMTurn:
     input_tokens: int | None = None
     output_tokens: int | None = None
     raw: Any = None  # provider-specific content to replay in history
+    model: str | None = None  # model that actually answered (may be a fallback)
+    attempts: list[str] = field(default_factory=list)  # e.g. ["gemini-3.8-flash: 503 (1.9s)", ...]
 
 
 # History items:
@@ -117,12 +119,18 @@ class GeminiLLM:
         candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
         last: Exception | None = None
         resp = None
+        used = model
+        attempts: list[str] = []
         for i, m in enumerate(candidates):
             for attempt in range(2):
+                t0 = time.perf_counter()
                 try:
                     resp = self._client.models.generate_content(model=m, contents=contents, config=config_for(m))
+                    used = m
                     break
                 except Exception as e:  # SDK raises various errors; keep internals out of user-facing text
+                    code = getattr(e, "code", None) or type(e).__name__
+                    attempts.append(f"{m}: {code} ({time.perf_counter() - t0:.1f}s)")
                     if "timeout" in type(e).__name__.lower() or "timed out" in str(e).lower():
                         raise LLMError(f"Gemini did not answer within {LLM_TIMEOUT_S:.0f}s") from e
                     last = e
@@ -149,4 +157,6 @@ class GeminiLLM:
             input_tokens=um.prompt_token_count if um else None,
             output_tokens=out_tokens,
             raw=content,
+            model=used,
+            attempts=attempts,
         )

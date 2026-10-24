@@ -184,7 +184,11 @@ def run_agent(
         add_step(
             type="llm",
             input={"tools_offered": len(offer), "history_items": len(history)},
-            output={"function_calls": [c.name for c in turn.calls]} if turn.calls else {"final_answer_chars": len(turn.text)},
+            output={
+                **({"function_calls": [c.name for c in turn.calls]} if turn.calls else {"final_answer_chars": len(turn.text)}),
+                **({"model": turn.model} if turn.model else {}),
+                **({"retries": turn.attempts} if turn.attempts else {}),
+            },
             ms=int((time.perf_counter() - t0) * 1000),
             tokens=((turn.input_tokens or 0) + (turn.output_tokens or 0)) if turn.input_tokens is not None else None,
             input_tokens=turn.input_tokens,
