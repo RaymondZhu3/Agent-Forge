@@ -240,3 +240,24 @@ def test_smart_spend_searches_bill_plans():
     assert "serpapi_web_search" in {t.name for t in SMART_SPEND.tools}
     assert "web search for that provider's current plans" in SMART_SPEND.instructions
     assert SMART_SPEND.guardrails.max_tool_calls >= 8
+
+
+def test_saving_cites_the_prices_it_came_from_not_a_coincidental_purchase():
+    """Live 5:42 PM: "$11.99/mo vs $6.99/mo = $5.00/mo" was sourced to a $5 coffee in nessie_purchases."""
+    outputs = [
+        (2, "nessie_bills", {"bills": [{"payee": "Netflix", "amount": 24.99}, {"payee": "Spotify", "amount": 11.99}]}),
+        (3, "nessie_purchases", {"purchases": [{"amount": 5}, {"amount": 249}]}),
+        (8, "serpapi_web_search", {"results": [{"snippet": "Student $6.99/month. Free $0. Standard $19.99/month."}]}),
+    ]
+    text = ("Netflix $24.99/mo. Standard is $19.99/month, saving $5.00/month.\n"
+            "Spotify: Current $11.99/mo vs $0.00/mo = $11.99/mo saved.\n"
+            "Student: Current $11.99/mo vs $6.99/mo = $5.00/mo ($5.00 x 12 = $60.00 per year).\n"
+            "You also bought a $5.00 coffee.")
+    _, claims, _ = verify_answer(text, outputs, "flag")
+    fives = [c for c in claims if c.text == "$5.00"]
+    assert [(c.how, c.source_tool) for c in fives[:2]] == [("difference", "nessie_bills")] * 2
+    assert fives[-1].how == "exact" and fives[-1].source_tool == "nessie_purchases"  # not a saving sentence
+    sixty = next(c for c in claims if c.text == "$60.00")
+    assert sixty.verified and sixty.how == "annualized" and sixty.source_tool == "nessie_bills"
+    elevens = [c for c in claims if c.text == "$11.99"]
+    assert all(c.how == "exact" and c.source_tool == "nessie_bills" for c in elevens)

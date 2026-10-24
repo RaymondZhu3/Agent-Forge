@@ -55,6 +55,7 @@ def collect_numbers(data: Any, step: int, tool: str, out: list[Evidence], key: s
             collect_numbers(v, step, tool, out, key)
 
 
+SAVING_RE = re.compile(r"sav|=|differen|less|cheaper|lower", re.I)
 BOUNDARY_RE = re.compile(r"[!?\n]|\.(?!\d)")
 
 
@@ -119,6 +120,32 @@ def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tupl
         ev = next((e for e in evidence if abs(e.value - value) <= TOL), None)
         if ev is not None:
             exact[i] = ev
+    how_of = {i: "exact" for i in exact}
+
+    # A saving that also equals some unrelated tool number (a $5 purchase) should cite the prices it came from:
+    # "$11.99/mo vs $6.99/mo = $5.00" is a difference, not "the $5 coffee". Live 5:42 PM bill-savings run.
+    money = [i for i in exact if not hits[i][1]]
+    for i in money:
+        m, _, value = hits[i]
+        if not SAVING_RE.search(_sentence(answer, m.start(), m.end())):
+            continue
+        best: tuple[int, int] | None = None
+        for x in money:
+            for y in money:
+                a, b = hits[x][2], hits[y][2]
+                if x >= y or i in (x, y) or hits[x][0].start() > m.start() or hits[y][0].start() > m.start():
+                    continue  # operands must be other figures stated before this one
+                if min(a, b) <= TOL or abs(a - value) <= TOL or abs(b - value) <= TOL:
+                    continue
+                if abs(abs(a - b) - value) <= TOL:
+                    dist = 2 * m.start() - hits[x][0].start() - hits[y][0].start()
+                    if best is None or dist < best[0]:
+                        best = (dist, x if a >= b else y)
+        if best is not None:
+            src = exact[best[1]]
+            exact[i] = Evidence(value, src.step, src.tool)
+            how_of[i] = "difference"
+
     stated: list[Evidence] = []
     for i, ev in exact.items():
         if not hits[i][1] and all(abs(x.value - ev.value) > TOL for x in stated):
@@ -127,7 +154,7 @@ def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tupl
     found: list[tuple[Claim, tuple[int, int]]] = []
     for i, (m, percent, value) in enumerate(hits):
         if i in exact:
-            ev, how = exact[i], "exact"
+            ev, how = exact[i], how_of[i]
         elif percent:
             ev, how = _match(value, evidence, True)
         else:
