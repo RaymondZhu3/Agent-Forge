@@ -89,6 +89,42 @@ def _num(v: Any) -> float | None:
 
 
 # ---------------- Shopping ----------------
+# Live Google Shopping results mixed in refurbished units, eBay/Whatnot resale, single replacement earbuds,
+# an "EMPTY RETAIL BOX ONLY" listing and different models; those made fake "savings". Keep comparable items only.
+
+RESALE_SOURCES = ("ebay", "whatnot", "poshmark", "mercari", "facebook", "offerup", "depop", "swappa", "craigslist")
+NOT_THE_ITEM = (
+    "refurbished", "renewed", "pre-owned", "preowned", "used", "open box", "for parts", "box only", "empty",
+    "replacement", "case only", "charging case only", "left ", "right ", "single ", "cover", "skin", "sticker",
+    "compatible with", "for airpods", "dummy", "replica", "3d model", "download", "receiver -", "dongle only",
+    "no mouse", "mouse only",
+)
+# Lowest price comes from these when any are present (marketplace sellers like "Walmart - X" count as Walmart).
+TRUSTED_RETAILERS = (
+    "amazon", "walmart", "target", "best buy", "costco", "apple", "b&h", "adorama", "newegg", "sam's club",
+    "micro center", "staples", "office depot", "kohl's", "macy's", "home depot", "lowe's", "verizon", "at&t",
+)
+
+
+def _trusted(source: str | None) -> bool:
+    s = (source or "").lower()
+    return any(s.startswith(r) for r in TRUSTED_RETAILERS)
+
+
+def _not_comparable(query: str, r: dict[str, Any]) -> str | None:
+    title = f" {(r.get('title') or '').lower()} "
+    source = (r.get("source") or "").lower()
+    if r.get("second_hand_condition") or not source or any(m in source for m in RESALE_SOURCES):
+        return "used_or_resale"
+    if any(w in title for w in NOT_THE_ITEM):
+        return "part_or_accessory"
+    tokens = [t for t in "".join(c if c.isalnum() else " " for c in query.lower()).split() if t]
+    if not all(t in title for t in tokens):
+        return "different_product"
+    if _num(r.get("extracted_price")) is None:
+        return "different_product"
+    return None
+
 
 def _shopping(input: dict[str, Any], settings: dict[str, Any]):
     raw, cached, fixture = serp_request(
@@ -96,22 +132,32 @@ def _shopping(input: dict[str, Any], settings: dict[str, Any]):
         {"engine": "google_shopping", "q": input["query"].strip(), "location": settings.get("location", "Austin, Texas"),
          "gl": "us", "hl": "en"},
     )
-    products = []
-    for r in (raw.get("shopping_results") or [])[: int(input.get("max_results") or 8)]:
-        products.append({
-            "title": r.get("title"),
-            "price": _num(r.get("extracted_price")),
-            "price_text": r.get("price"),
-            "merchant": r.get("source"),
-            "rating": r.get("rating"),
-            "url": r.get("product_link") or r.get("link"),
-        })
-    prices = [p["price"] for p in products if p["price"] is not None]
+    limit = int(input.get("max_results") or 8)
+    products, excluded = [], {"used_or_resale": 0, "part_or_accessory": 0, "different_product": 0}
+    for r in raw.get("shopping_results") or []:
+        why = _not_comparable(input["query"], r)
+        if why:
+            excluded[why] += 1
+            continue
+        if len(products) < limit:
+            products.append({
+                "title": r.get("title"),
+                "price": _num(r.get("extracted_price")),
+                "price_text": r.get("price"),
+                "merchant": r.get("source"),
+                "trusted_retailer": _trusted(r.get("source")),
+                "rating": r.get("rating"),
+                "url": r.get("product_link") or r.get("link"),
+            })
+    trusted = [p["price"] for p in products if p["price"] is not None and p["trusted_retailer"]]
+    prices = trusted or [p["price"] for p in products if p["price"] is not None]
     data = {
         "query": input["query"],
-        "products": products,
+        "products": products,  # new items from named retailers matching the query only
+        "lowest_price_from": "trusted retailers" if trusted else "all listed sellers",
         "lowest_price": min(prices) if prices else None,
         "highest_price": max(prices) if prices else None,
+        "excluded_listings": excluded,
     }
     return data, cached, fixture
 
@@ -131,7 +177,9 @@ serpapi_shopping = Tool(
     category="search",
     description=(
         "Look up current prices for a specific product across online stores (Google Shopping). "
-        "Returns product titles, prices, merchants and links. Use a specific product name, not a category."
+        "Returns NEW items from named retailers that match the product name (used, resale, parts and "
+        "other models are excluded and only counted). lowest_price prefers major retailers (trusted_retailer). "
+        "Quote prices from trusted retailers when available. Use a specific product name, not a category."
     ),
     parameters={
         "type": "object",

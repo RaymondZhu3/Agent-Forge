@@ -1,0 +1,26 @@
+{
+  "_note": "Subset of real Google Shopping results via SerpApi, Oct 24 2026 (fields trimmed, links removed).",
+  "AirPods Pro 2": [
+    {"title": "Apple AirPods Pro with MagSafe Case", "extracted_price": 149.99, "source": "Best Buy", "second_hand_condition": "refurbished", "rating": 4.3},
+    {"title": "AirPods Pro Apple", "extracted_price": 70.0, "source": "eBay", "second_hand_condition": null, "rating": 4.4},
+    {"title": "Apple AirPods Pro (2nd Generation) with MagSafe Case (usbc), White", "extracted_price": 139.99, "source": "Walmart - Cellfeee", "second_hand_condition": null, "rating": null},
+    {"title": "Apple AirPods Pro 2nd Gen (USB-C) - Right Replacement AirPod (A3047) - White (Renewed)", "extracted_price": 79.99, "source": "Best Buy", "second_hand_condition": "refurbished", "rating": 4.3},
+    {"title": "AirPods Pro 2", "extracted_price": 99.0, "source": "Poshmark", "second_hand_condition": null, "rating": null},
+    {"title": "Apple AirPods Pro 2", "extracted_price": 40.0, "source": "Whatnot", "second_hand_condition": null, "rating": null},
+    {"title": "airpods pro 2", "extracted_price": 85.0, "source": "Les Appartements de Juju", "second_hand_condition": null, "rating": 4.6},
+    {"title": "Apple AirPods Pro", "extracted_price": 286.25, "source": "iPromo", "second_hand_condition": null, "rating": 4.4},
+    {"title": "used Pre-owned Apple AirPods Pro 2 White With Usb-c Charging Case In Ear Headphones Mtjv3am/a - C", "extracted_price": 263.49, "source": "Walmart - Web Offers", "second_hand_condition": "pre-owned", "rating": 4.1},
+    {"title": "Apple - Refurbished Excellent - AirPods Pro 2nd Gen (USB-C) - Replacement Charging Case (A2968)", "extracted_price": 59.99, "source": "Best Buy", "second_hand_condition": "refurbished", "rating": 4.3},
+    {"title": "AirPods Pro 2 Wireless Earbuds - Noiseless, Powerful", "extracted_price": 412.95, "source": "VXB.com Bearings", "second_hand_condition": null, "rating": null}
+  ],
+  "Logitech MX Master 3S": [
+    {"title": "Logitech Mx Anywhere 3s Wireless Mouse Graphite Pair (2) W/ Logi Bolt", "extracted_price": 89.0, "source": "eBay", "second_hand_condition": "pre-owned", "rating": 3.7},
+    {"title": "Logitech MX Anywhere 3S Wireless Mouse for Business", "extracted_price": 148.98, "source": "Garmade", "second_hand_condition": null, "rating": 4.5},
+    {"title": "Logitech MX Master 3S Bluetooth Edition Wireless Mouse, No USB Receiver - Ultra-Fast Scrolling", "extracted_price": 49, "source": null, "second_hand_condition": null, "rating": 4.4},
+    {"title": "Logitech MX Master Wireless Mouse", "extracted_price": 89.0, "source": "Walmart - YYY Trade LLC (SN RECORDED)", "second_hand_condition": null, "rating": 4.8},
+    {"title": "Logitech MX Master 3 Advanced Wireless Mouse, EMPTY RETAIL BOX ONLY, NO MOUSE, 7 Buttons", "extracted_price": 9.49, "source": "eBay - aromaisland", "second_hand_condition": "pre-owned", "rating": null},
+    {"title": "RECEIVER - Logitech MX Master 3S USB/Bluetooth Wireless Mouse", "extracted_price": 39.99, "source": "eBay", "second_hand_condition": "pre-owned", "rating": null},
+    {"title": "Logitech MX Master 3S 3D model download", "extracted_price": 100.0, "source": "3DModels", "second_hand_condition": null, "rating": null},
+    {"title": "Meta Quest 3S", "extracted_price": 285.0, "source": "JoyLand", "second_hand_condition": null, "rating": 5.0}
+  ]
+}

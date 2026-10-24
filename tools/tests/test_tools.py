@@ -83,7 +83,8 @@ def test_serpapi_live_call_is_cached_and_normalized(monkeypatch):
     assert not r3.cached
     assert len(calls) == 2
     assert r1.data["products"][0] == {"title": "AirPods Pro 2", "price": 199.99, "price_text": "$199.99",
-                                      "merchant": "Best Buy", "rating": None, "url": "https://bb"}
+                                      "merchant": "Best Buy", "trusted_retailer": True, "rating": None,
+                                      "url": "https://bb"}
     assert "test-key" not in str(r1.to_dict())
 
 
@@ -146,3 +147,24 @@ def test_nessie_unreachable_falls_back_to_labeled_fixtures(monkeypatch):
     r = registry.get("nessie_purchases").run({})
     assert not r.ok and "reach Nessie" in (r.error or "")
     monkeypatch.setattr(nessie, "_offline_until", 0.0)
+
+
+def test_shopping_keeps_only_comparable_new_listings_from_real_results(monkeypatch):
+    """Real-data bug: live results made a "$209 saving" from a $40 Whatnot listing (and offered an
+    empty box, a single earbud, refurbs and a different mouse as prices)."""
+    import json
+    from pathlib import Path
+
+    from tools import serpapi
+
+    live = json.loads((Path(__file__).parent / "data" / "serp_shopping_live_2026-10-24.json").read_text())
+    monkeypatch.setattr(serpapi, "serp_request", lambda tool, params: ({"shopping_results": live[params["q"]]}, False, False))
+    tool = registry.get("serpapi_shopping")
+
+    air = tool.run({"query": "AirPods Pro 2"}).data
+    assert {p["merchant"] for p in air["products"]} == {"Walmart - Cellfeee", "Les Appartements de Juju", "VXB.com Bearings"}
+    assert air["lowest_price"] == 139.99 and air["lowest_price_from"] == "trusted retailers"
+    assert air["excluded_listings"] == {"used_or_resale": 7, "part_or_accessory": 0, "different_product": 1}
+
+    mouse = tool.run({"query": "Logitech MX Master 3S"}).data
+    assert mouse["products"] == [] and mouse["lowest_price"] is None
