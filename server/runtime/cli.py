@@ -28,6 +28,12 @@ from .templates import TEMPLATES
 
 
 def main() -> int:
+    # Windows consoles default to cp1252; model answers can contain characters it can't encode.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
     p = argparse.ArgumentParser()
     p.add_argument("template", nargs="?", choices=[t.template for t in TEMPLATES])
     p.add_argument("message", nargs="?")
@@ -62,7 +68,7 @@ def main() -> int:
         print(resp.model_dump_json(indent=2))
         return 0 if resp.status == "completed" else 1
 
-    print(f"\n== {agent.name} · {resp.status} · {resp.total_latency_ms} ms · data: {', '.join(resp.data_modes) or 'none'}")
+    print(f"\n== {agent.name} | {resp.status} | {resp.total_latency_ms} ms | data: {', '.join(resp.data_modes) or 'none'}")
     for s in resp.steps:
         label = s.tool_name or s.type
         extra = json.dumps(s.output, default=str)[:140] if s.output else ""
@@ -73,7 +79,7 @@ def main() -> int:
         ok = sum(c.verified for c in resp.claims)
         print(f"Fact-check: {ok}/{len(resp.claims)} figures verified" + (" (blocked)" if resp.blocked else ""))
         for c in resp.claims:
-            mark = "✓" if c.verified else "✗"
+            mark = "ok" if c.verified else " X"
             src = f"step {c.source_step} {c.source_tool} ({c.how})" if c.verified else "no matching tool data"
             print(f"  {mark} {c.text:>12}  {src}")
     if resp.usage.input_tokens is not None:
