@@ -143,6 +143,11 @@ def test_nessie_unreachable_falls_back_to_labeled_fixtures(monkeypatch):
     assert len(calls) == n  # stays offline for a minute instead of retrying every call
 
     monkeypatch.setattr(nessie, "_offline_until", 0.0)
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: FakeResp(502, {}))
+    assert registry.get("nessie_accounts").run({}).mode == "fixture"  # 5xx counts as unreachable
+
+    monkeypatch.setattr(httpx, "get", down)
+    monkeypatch.setattr(nessie, "_offline_until", 0.0)
     monkeypatch.setenv("NESSIE_FALLBACK", "0")
     r = registry.get("nessie_purchases").run({})
     assert not r.ok and "reach Nessie" in (r.error or "")

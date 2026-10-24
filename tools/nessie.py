@@ -68,6 +68,8 @@ def _get(path: str) -> Any:
         raise ToolError("Nessie record not found (check customer_id)")
     if res.status_code in (401, 403):
         raise ToolError("Nessie rejected the API key")
+    if res.status_code >= 500:  # api.nessieisreal.com answered 502 during HackTX
+        raise NessieUnreachable(f"Nessie returned HTTP {res.status_code}")
     if res.status_code >= 400:
         raise ToolError(f"Nessie returned HTTP {res.status_code}")
     return res.json()
