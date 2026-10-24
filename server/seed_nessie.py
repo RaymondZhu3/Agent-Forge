@@ -24,7 +24,7 @@ TIMEOUT_S = 20
 
 
 def _post(path: str, body: dict[str, Any]) -> dict[str, Any]:
-    base = os.getenv("NESSIE_BASE_URL", "http://api.nessieisreality.com").rstrip("/")
+    base = os.getenv("NESSIE_BASE_URL", "https://api.nessieisreal.com").rstrip("/")
     res = httpx.post(f"{base}{path}", params={"key": os.environ["NESSIE_API_KEY"]}, json=body, timeout=TIMEOUT_S)
     if res.status_code >= 400:
         raise SystemExit(f"Nessie POST {path} failed: HTTP {res.status_code} {res.text[:200]}")
@@ -49,7 +49,7 @@ def seed() -> str:
     merchants: dict[str, str] = {}
     for key, name in fx.DEMO_MERCHANTS.items():
         merchants[key] = _post("/merchants", {
-            "name": name, "category": ["demo"],
+            "name": name, "category": "demo",
             "address": {"street_number": "1", "street_name": "Main St", "city": "Austin", "state": "TX", "zip": "78701"},
             "geocode": {"lat": 30.2672, "lng": -97.7431},
         })["_id"]
@@ -57,7 +57,7 @@ def seed() -> str:
     for fx_acct, purchases in fx.DEMO_PURCHASES.items():
         for p in purchases:
             _post(f"/accounts/{accounts[fx_acct]}/purchases", {
-                "merchant_id": merchants[p["merchant_id"]], "medium": "balance",
+                "merchant_id": merchants[p["merchant_id"]], "medium": "balance", "status": "completed",
                 "purchase_date": p["purchase_date"], "amount": p["amount"], "description": p["description"],
             })
 
@@ -65,7 +65,7 @@ def seed() -> str:
         for b in bills:
             _post(f"/accounts/{accounts[fx_acct]}/bills", {
                 "status": "recurring", "payee": b["payee"], "nickname": b["nickname"],
-                "creation_date": "2026-10-01", "payment_date": f"2026-10-{b['recurring_date']:02d}",
+                "payment_date": f"2026-10-{b['recurring_date']:02d}",
                 "recurring_date": b["recurring_date"], "payment_amount": b["payment_amount"],
             })
     return cid
