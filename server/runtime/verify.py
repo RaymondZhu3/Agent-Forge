@@ -18,7 +18,7 @@ from server.schemas import Claim
 
 MONEY_RE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)")
 PCT_RE = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)\s?%")
-TOL = 0.011
+TOL = 0.0051  # half a cent: with whole-dollar Nessie data, 0.011 let $109.01 "exactly" match $109
 MAX_VALUES = 400
 
 

@@ -158,3 +158,19 @@ def test_verify_percent_and_annualized():
     by = {c.text: c for c in claims}
     assert by["$299.88"].verified and by["$299.88"].how == "annualized"
     assert by["24%"].verified
+
+
+def test_verify_does_not_call_a_cent_off_figure_exact():
+    """Live bug: Nessie stored a $109.99 purchase as $109, and the $109.01 saving ($249.00 - $139.99)
+    was reported as an exact match of $109 instead of a difference."""
+    from server.runtime.verify import verify_answer
+
+    outputs = [
+        (2, "nessie_purchases", {"purchases": [{"amount": 249}, {"amount": 109}]}),
+        (5, "serpapi_shopping", {"lowest_price": 139.99}),
+    ]
+    _, claims, _ = verify_answer("Potential savings: $109.01 ($249.00 - $139.99).", outputs, "flag")
+    saving = next(c for c in claims if c.text == "$109.01")
+    assert saving.verified and saving.how == "difference"
+    _, claims, _ = verify_answer("You could save $108.50.", outputs, "flag")
+    assert not claims[0].verified
