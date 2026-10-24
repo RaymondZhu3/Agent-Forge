@@ -9,3 +9,6 @@ venv/
 node_modules/
 dist/
 .DS_Store
+
+# DB credential exports
+tiger-cloud-db-*-credentials.env
