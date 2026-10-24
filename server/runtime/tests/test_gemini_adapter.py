@@ -44,3 +44,20 @@ def test_adapter_round_trip(monkeypatch):
     fr = seen["contents2"][2].parts[0].function_response
     assert fr.name == "serpapi_shopping" and fr.id == "c1" and fr.response["data"] == {"x": 1}
     assert seen["contents2"][1] is turn.raw
+
+
+def test_client_has_timeout_and_gemini3_uses_low_thinking(monkeypatch):
+    """Real-data bug: a live run hung for minutes waiting on Gemini with no timeout."""
+    llm = GeminiLLM(api_key="fake")
+    assert llm._client._api_client._http_options.timeout == 60_000
+    seen = {}
+
+    def fake_generate(model, contents, config):
+        seen[model] = config
+        return make_resp([types.Part(text="ok")])
+
+    monkeypatch.setattr(llm._client.models, "generate_content", fake_generate)
+    for m in ("gemini-3.8-flash", "gemini-2.5-flash"):
+        llm.generate(m, "sys", [{"role": "user", "text": "hi"}], [])
+    assert seen["gemini-3.8-flash"].thinking_config.thinking_level == "LOW"
+    assert seen["gemini-2.5-flash"].thinking_config is None

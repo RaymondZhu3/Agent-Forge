@@ -49,6 +49,8 @@ class LLMError(Exception):
 
 # gemini-2.5-flash returns 404 "no longer available to new users" (Oct 2026); run tools.check_keys --write.
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
+# A Gemini call with no timeout hung a live CLI run for minutes; fail the step instead.
+LLM_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S") or 60)
 
 
 class GeminiLLM:
@@ -58,7 +60,9 @@ class GeminiLLM:
         key = api_key or os.getenv("GEMINI_API_KEY")
         if not key:
             raise LLMError("GEMINI_API_KEY is not set")
-        self._client = genai.Client(api_key=key)
+        from google.genai import types
+
+        self._client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=int(LLM_TIMEOUT_S * 1000)))
 
     def generate(self, model: str, system: str, history: History, tools: list[Tool]) -> LLMTurn:
         from google.genai import types
@@ -93,10 +97,14 @@ class GeminiLLM:
             tools=[types.Tool(function_declarations=decls)] if decls else None,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             temperature=0.2,
+            # Gemini 3 models think by default; "low" keeps tool-calling turns fast.
+            thinking_config=types.ThinkingConfig(thinking_level="low") if model.startswith("gemini-3") else None,
         )
         try:
             resp = self._client.models.generate_content(model=model, contents=contents, config=config)
         except Exception as e:  # SDK raises various errors; keep internals out of user-facing text
+            if "timeout" in type(e).__name__.lower() or "timed out" in str(e).lower():
+                raise LLMError(f"Gemini did not answer within {LLM_TIMEOUT_S:.0f}s") from e
             raise LLMError(f"Gemini request failed ({type(e).__name__}: {str(e)[:200]})") from e
 
         cand = (resp.candidates or [None])[0]
