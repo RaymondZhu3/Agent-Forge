@@ -106,6 +106,51 @@ def test_all_models_overloaded_gets_one_more_round(monkeypatch):
     assert 4.0 in sleeps
 
 
+def _quota_err(quota_id, delay=None):
+    from google.genai import errors
+
+    details = [{"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [{"quotaId": quota_id}]}]
+    if delay:
+        details.append({"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": delay})
+    return errors.ClientError(429, {"error": {"code": 429, "message": "You exceeded your current quota",
+                                              "status": "RESOURCE_EXHAUSTED", "details": details}})
+
+
+def test_daily_quota_skips_model_and_per_minute_waits_retry_delay(monkeypatch):
+    """Live 5:25 PM: 429 quota on all models; the error hid which quota, and instant retries burned requests."""
+    llm = GeminiLLM(api_key="fake")
+    sleeps = []
+    llm._sleep = sleeps.append
+    tried = []
+
+    def fake_generate(model, contents, config):
+        tried.append(model)
+        if model == "gemini-3.5-flash":
+            raise _quota_err("GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+        if len(tried) <= 3:
+            raise _quota_err("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", "12s")
+        return make_resp([types.Part(text="ok")])
+
+    monkeypatch.setattr(llm._client.models, "generate_content", fake_generate)
+    turn = llm.generate("gemini-3.5-flash", "sys", [{"role": "user", "text": "hi"}], [])
+    assert turn.text == "ok"
+    assert tried == ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
+    assert 12.0 in sleeps
+
+
+def test_quota_error_names_the_quota():
+    import pytest
+
+    from server.runtime.llm import LLMError
+
+    llm = GeminiLLM(api_key="fake")
+    llm._sleep = lambda s: None
+    llm._client.models.generate_content = lambda **k: (_ for _ in ()).throw(
+        _quota_err("GenerateRequestsPerDayPerProjectPerModel-FreeTier"))
+    with pytest.raises(LLMError, match="quota exceeded.*PerDay"):
+        llm.generate("gemini-3.5-flash", "sys", [{"role": "user", "text": "hi"}], [])
+
+
 def test_non_overload_errors_do_not_fall_back(monkeypatch):
     import pytest
     from google.genai import errors

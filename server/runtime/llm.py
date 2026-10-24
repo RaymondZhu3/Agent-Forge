@@ -10,6 +10,7 @@ candidate content to history unchanged so thought signatures are preserved.
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -58,6 +59,17 @@ FALLBACK_MODELS = [m.strip() for m in (os.getenv("GEMINI_FALLBACK_MODELS") or "g
 RETRY_DELAY_S = 1.5
 # Live 5:20 PM: 3.5 and 3.7 both 503'd within seconds and the run failed; spikes are short, so one more round.
 SECOND_ROUND_DELAY_S = 4.0
+# Live 5:25 PM: 429 "exceeded your current quota" on all three models. A per-minute limit says when to come back
+# (retryDelay); wait that long once if it's short. A per-day limit won't recover today: skip that model.
+MAX_QUOTA_WAIT_S = float(os.getenv("GEMINI_MAX_QUOTA_WAIT_S") or 35)
+
+
+def _quota(e: Exception) -> tuple[str | None, float | None]:
+    """(quotaId, retryDelay seconds) from a Gemini 429, if present."""
+    text = str(e) + " " + str(getattr(e, "details", "") or "")
+    q = re.search(r"quotaId['\"]?\s*:\s*['\"]([\w-]+)", text)
+    d = re.search(r"retryDelay['\"]?\s*:\s*['\"](\d+(?:\.\d+)?)s", text)
+    return (q.group(1) if q else None), (float(d.group(1)) if d else None)
 
 
 def _overloaded(e: Exception) -> bool:
@@ -123,9 +135,16 @@ class GeminiLLM:
         resp = None
         used = model
         attempts: list[str] = []
+        daily_out: set[str] = set()  # models whose per-day quota is spent
+        quota_ids: dict[str, str] = {}
+        wait_s: float | None = None  # shortest per-minute retryDelay seen
         for i, m in enumerate(candidates + candidates):
             if i == len(candidates):
-                self._sleep(SECOND_ROUND_DELAY_S)
+                if wait_s is not None and wait_s > MAX_QUOTA_WAIT_S:
+                    break
+                self._sleep(max(SECOND_ROUND_DELAY_S, wait_s or 0))
+            if m in daily_out:
+                continue
             for attempt in range(2 if i < len(candidates) else 1):
                 t0 = time.perf_counter()
                 try:
@@ -140,11 +159,24 @@ class GeminiLLM:
                     last = e
                     if not _overloaded(e):
                         raise LLMError(f"Gemini request failed ({type(e).__name__}: {str(e)[:200]})") from e
+                    qid, delay = _quota(e)
+                    if qid:
+                        quota_ids[m] = qid
+                        if "PerDay" in qid:
+                            daily_out.add(m)
+                            break
+                    if delay is not None:  # rate-limited: retrying now just burns another request
+                        wait_s = delay if wait_s is None else min(wait_s, delay)
+                        break
                     if attempt == 0:
                         self._sleep(RETRY_DELAY_S)
             if resp is not None:
                 break
         if resp is None:
+            if quota_ids:
+                which = "; ".join(f"{m}: {q}" for m, q in quota_ids.items())
+                when = f" Per-minute limit: retry in {wait_s:.0f}s." if wait_s is not None else ""
+                raise LLMError(f"Gemini quota exceeded ({which}).{when}") from last
             raise LLMError(f"Gemini is overloaded; tried {', '.join(candidates)} ({str(last)[:120]})") from last
 
         cand = (resp.candidates or [None])[0]
