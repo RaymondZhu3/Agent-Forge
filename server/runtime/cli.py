@@ -34,7 +34,16 @@ def main() -> int:
     p.add_argument("--tools", action="store_true", help="list registered tools and exit")
     p.add_argument("--fact-check", choices=["flag", "block", "off"])
     p.add_argument("--json", action="store_true", help="print the full ChatResponse JSON")
+    p.add_argument("--no-file-cache", action="store_true", help="don't persist tool results to tools/.cache/")
     a = p.parse_args()
+
+    if not a.no_file_cache:
+        # Share cached SerpApi results across CLI runs so repeated debugging doesn't spend searches.
+        from pathlib import Path
+
+        from tools.cache import use_file_cache
+
+        use_file_cache(str(Path(__file__).resolve().parents[2] / "tools" / ".cache" / "cli_cache.json"))
 
     if a.tools:
         for t in registry.list_metadata():

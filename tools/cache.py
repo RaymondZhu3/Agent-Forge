@@ -52,6 +52,41 @@ def clear_memory_cache() -> None:
     _mem.clear()
 
 
+def use_file_cache(path: str) -> None:
+    """Persist the cache to a JSON file so separate CLI runs share it (CLI only; the server uses the DB).
+
+    With SERPAPI_CACHE_ONLY=1, expired entries are still served, so a demo can replay old results.
+    """
+    import os
+    from pathlib import Path
+
+    p = Path(path)
+
+    def _load() -> dict[str, Any]:
+        try:
+            return json.loads(p.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def _fget(key: str) -> dict[str, Any] | None:
+        hit = _load().get(key)
+        if not hit:
+            return None
+        if hit["expires"] < time.time() and os.getenv("SERPAPI_CACHE_ONLY") != "1":
+            return None
+        return hit["result"]
+
+    def _fset(key: str, tool_name: str, result: dict[str, Any], ttl_seconds: int) -> None:
+        data = _load()
+        data[key] = {"expires": time.time() + ttl_seconds, "tool": tool_name, "result": result}
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data))
+        tmp.replace(p)
+
+    set_cache_backend(get=_fget, set=_fset)
+
+
 def cache_key(tool_name: str, params: dict[str, Any]) -> str:
     """Canonical key: tool name + normalized params (case/whitespace-insensitive strings)."""
     norm = {
