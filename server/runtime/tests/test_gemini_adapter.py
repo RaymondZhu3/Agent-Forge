@@ -88,6 +88,7 @@ def test_all_models_overloaded_gets_one_more_round(monkeypatch):
     """Live 5:20 PM: 3.5 and 3.7 both 503'd within seconds and the demo run failed."""
     from google.genai import errors
 
+    monkeypatch.setattr("server.runtime.llm.FALLBACK_MODELS", ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"])
     llm = GeminiLLM(api_key="fake")
     sleeps = []
     llm._sleep = sleeps.append
@@ -140,6 +141,7 @@ def _quota_err(quota_id, delay=None):
 
 def test_daily_quota_skips_model_and_per_minute_waits_retry_delay(monkeypatch):
     """Live 5:25 PM: 429 quota on all models; the error hid which quota, and instant retries burned requests."""
+    monkeypatch.setattr("server.runtime.llm.FALLBACK_MODELS", ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"])
     llm = GeminiLLM(api_key="fake")
     sleeps = []
     llm._sleep = sleeps.append

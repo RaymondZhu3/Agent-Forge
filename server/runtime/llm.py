@@ -57,7 +57,7 @@ DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
 # Live 5:28 PM: gemini-3.5-flash hung 59 s then 504 DEADLINE_EXCEEDED; normal steps take 1.5-10 s, so give up sooner
 # and try the next model instead of failing the run.
 LLM_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S") or 30)
-FALLBACK_MODELS = [m.strip() for m in (os.getenv("GEMINI_FALLBACK_MODELS") or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.5-flash").split(",") if m.strip()]
+FALLBACK_MODELS = [m.strip() for m in (os.getenv("GEMINI_FALLBACK_MODELS") or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash").split(",") if m.strip()]
 RETRY_DELAY_S = 1.5
 # Live 5:20 PM: 3.5 and 3.7 both 503'd within seconds and the run failed; spikes are short, so one more round.
 SECOND_ROUND_DELAY_S = 4.0

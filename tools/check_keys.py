@@ -157,7 +157,10 @@ def main() -> int:
     best = flash[0] if flash else None
     if a.latency and flash:
         print("Gemini latency (tiny prompt):")
-        best = time_models([m for m in flash if "omni" not in m][:4]) or best
+        # Live 5:30 PM: every model failed (504/429) and --write still set the untested "best" one.
+        best = time_models([m for m in flash if "omni" not in m][:4])
+        if best is None:
+            print("         no model answered; .env not changed (429 = quota, try another teammate's key)")
     if a.write and best:
         text = ENV.read_text() if ENV.exists() else ""
         line = f"GEMINI_MODEL={best}"
