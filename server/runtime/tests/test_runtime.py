@@ -215,3 +215,28 @@ def test_derived_figures_need_verified_operands_in_the_answer():
     outputs.append((4, "serpapi_shopping", {"lowest_price": 139.99}))
     _, claims, _ = verify_answer("Paid $249.00, now $139.99: save $109.01.", outputs, "flag")
     assert {c.text: c.how for c in claims}["$109.01"] == "difference"
+
+
+def test_bill_plan_switch_saving_verifies_monthly_and_yearly():
+    """Smart Spend said "save up to $121.98" on bills; now it names a cheaper plan from a web search."""
+    outputs = [
+        (3, "nessie_bills", {"recurring_monthly_total": 121.98, "bills": [{"payee": "Netflix", "amount": 24.99},
+                                                                         {"payee": "Spotify", "amount": 11.99}]}),
+        (5, "serpapi_web_search", {"results": [{"snippet": "Standard with ads: $7.99/month. Standard: $17.99/month."}]}),
+    ]
+    text = "Netflix: $24.99/mo vs Standard with ads $7.99/mo = $17.00/mo, $204.00 per year."
+    _, claims, _ = verify_answer(text, outputs, "flag")
+    by = {c.text: (c.verified, c.how) for c in claims}
+    assert by["$7.99"] == (True, "exact") and by["$17.00"] == (True, "difference")
+    assert by["$204.00"] == (True, "annualized")
+    # a yearly figure from an unstated or made-up plan price is not verified
+    _, claims, _ = verify_answer("Switch to a $5.99 plan: save $19.00/mo, $228.00 per year.", outputs, "flag")
+    assert not any(c.verified for c in claims)
+
+
+def test_smart_spend_searches_bill_plans():
+    from server.runtime.templates import SMART_SPEND
+
+    assert "serpapi_web_search" in {t.name for t in SMART_SPEND.tools}
+    assert "web search for that provider's current plans" in SMART_SPEND.instructions
+    assert SMART_SPEND.guardrails.max_tool_calls >= 8

@@ -3,7 +3,7 @@ backed by data a tool actually returned during this run.
 
 A figure is verified if it equals (±1 cent) a number in the tool outputs, or a
 difference or sum of two such numbers (e.g. a saving = paid − found price), or a
-monthly figure ×12 (annualized). Anything else is unverified.
+monthly figure or monthly difference ×12 (annualized). Anything else is unverified.
 
 Deterministic and cheap: no model call.
 """
@@ -92,6 +92,11 @@ def _match(value: float, evidence: list[Evidence], percent: bool) -> tuple[Evide
                 return a, "difference"
             if abs(a.value + b.value - value) <= TOL:
                 return a, "sum"
+    # Yearly saving from a plan switch: ($24.99 - $7.99) x 12 = $204.00. Only between stated, verified figures.
+    for i, a in enumerate(vals):
+        for b in vals[i + 1:]:
+            if abs(abs(a.value - b.value) * 12 - value) <= TOL * 12:
+                return a, "annualized"
     return None, None
 
 

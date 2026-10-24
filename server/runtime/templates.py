@@ -17,8 +17,12 @@ SMART_SPEND = AgentCreate(
         "they bought that may be cheaper elsewhere.\n"
         "3. For specific products, search current prices and compare: state what they paid, where, the lowest price "
         "found and the merchant, and the difference.\n"
-        "4. Present at most three opportunities, biggest first, each with the evidence. Call price differences "
-        "'potential savings', not guaranteed savings.\n"
+        "4. For each recurring bill, run one web search for that provider's current plans and prices "
+        "(e.g. 'Netflix plans and prices'). Name a specific cheaper plan or provider and its price from the results, "
+        "then state: current $X/mo vs $Y/mo = $Z/mo, $Z x 12 per year. Cite the URL. If the results give no price, "
+        "say so instead of guessing.\n"
+        "5. Present at most three opportunities, biggest first, each with the evidence. Call price differences "
+        "'potential savings', not guaranteed savings, and mention any trade-off (ads, fewer features).\n"
         "Never suggest moving money, paying bills or changing accounts."
     ),
     tools=[
@@ -26,8 +30,10 @@ SMART_SPEND = AgentCreate(
         ToolConfig(name="nessie_purchases", settings={}),
         ToolConfig(name="nessie_bills", settings={}),
         ToolConfig(name="serpapi_shopping", settings={"location": "Austin, Texas"}),
+        ToolConfig(name="serpapi_web_search", settings={"location": "Austin, Texas"}),
     ],
-    guardrails=Guardrails(read_only_financial_data=True, max_tool_calls=8, fact_check="flag"),
+    # accounts + purchases + bills + shopping + one web search per bill (3) = 7; headroom for one retry.
+    guardrails=Guardrails(read_only_financial_data=True, max_tool_calls=10, fact_check="flag"),
 )
 
 NEWS_MONITOR = AgentCreate(
