@@ -1,6 +1,6 @@
 """Capital One Nessie tools: accounts, purchases, bills (Person 1). Read-only.
 
-Docs: http://api.nessieisreality.com/documentation
+Docs: https://api.nessieisreal.com/docs (old host api.nessieisreality.com is gone)
 Routes used (GET only):
   /customers                      list customers (fallback when no customer_id configured)
   /customers/{id}                 customer
@@ -54,7 +54,7 @@ def _use_fixtures() -> bool:
 
 
 def _base() -> str:
-    return os.getenv("NESSIE_BASE_URL", "http://api.nessieisreality.com").rstrip("/")
+    return os.getenv("NESSIE_BASE_URL", "https://api.nessieisreal.com").rstrip("/")
 
 
 def _get(path: str) -> Any:

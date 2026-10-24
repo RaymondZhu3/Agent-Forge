@@ -121,7 +121,7 @@ def check_nessie() -> None:
     if not key:
         print("Nessie   [x] NESSIE_API_KEY missing (tools will use demo fixtures)")
         return
-    base = os.getenv("NESSIE_BASE_URL", "http://api.nessieisreality.com").rstrip("/")
+    base = os.getenv("NESSIE_BASE_URL", "https://api.nessieisreal.com").rstrip("/")
     r = httpx.get(f"{base}/customers", params={"key": key}, timeout=20)
     if r.status_code != 200:
         print(f"Nessie   [x] HTTP {r.status_code}: {_scrub(r.text[:200])}")

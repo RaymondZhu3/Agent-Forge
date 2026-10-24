@@ -190,3 +190,11 @@ def test_nessie_4xx_error_includes_reason_without_key(monkeypatch):
     monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
     r = registry.get("nessie_accounts").run({}, {"customer_id": "c1"})
     assert not r.ok and "bad merchant_id" in r.error and "secret-key" not in r.error
+
+
+def test_nessie_defaults_to_the_live_host(monkeypatch):
+    """The old default http://api.nessieisreality.com no longer serves the API (BUILD_STATUS gotcha)."""
+    from tools import nessie
+
+    monkeypatch.delenv("NESSIE_BASE_URL", raising=False)
+    assert nessie._base() == "https://api.nessieisreal.com"
