@@ -47,7 +47,8 @@ class LLMError(Exception):
     """Model call failed; message is safe to show."""
 
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+# gemini-2.5-flash returns 404 "no longer available to new users" (Oct 2026); run tools.check_keys --write.
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
 
 
 class GeminiLLM:
