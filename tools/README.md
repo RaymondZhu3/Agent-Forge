@@ -56,3 +56,11 @@ Every result is labeled `live`, `cached` or `fixture`. SerpApi responses are cac
 After the final answer, `verify` checks every `$` amount and `%` against money fields the tools returned in that
 run: exact match, a difference/sum of two figures (e.g. savings), or a monthly figure ×12. Guardrail
 `fact_check`: `flag` marks unverified figures, `block` redacts them, `off` skips. Logged as a `verify` run step.
+
+## API limits (free tiers, checked Oct 24 2026)
+
+| API | Limit | Notes |
+|---|---|---|
+| SerpApi | 250 searches/month, 50/hour per key | Only successful, non-cached searches count. `/account.json` is free: `python -m tools.check_keys`. Use `SERPAPI_CACHE_ONLY=1` for repeat debugging; the CLI caches to `tools/.cache/`. Keep one key just for the deployed demo. |
+| Gemini | Free tier, per project and per model; daily quota resets at midnight Pacific | `gemini-2.5-flash` is 404 for new keys. `gemini-3.8-flash` gave 503 "high demand" and 30-60 s per step on Oct 24. Runtime retries 503/429 once, then falls back (`GEMINI_FALLBACK_MODELS`, default `gemini-3.7-flash,gemini-3.5-flash`); 60 s timeout (`GEMINI_TIMEOUT_S`). Pick the fastest: `python -m tools.check_keys --latency --write`. One key per teammate = separate quotas. |
+| Nessie | No published limits | Data is per API key: seed and run with the same key. Unreachable from the HackTX network on Oct 24; tools then use labeled fixtures for 60 s (`NESSIE_FALLBACK=0` to fail instead). |

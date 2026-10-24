@@ -52,28 +52,53 @@ def _flash_rank(name: str) -> tuple:
     return (not unstable, "lite" not in name, ver)
 
 
-def check_gemini() -> str | None:
+def check_gemini() -> list[str]:
     key = os.getenv("GEMINI_API_KEY")
     if not key:
         print("Gemini   [x] GEMINI_API_KEY missing")
-        return None
+        return []
     r = httpx.get("https://generativelanguage.googleapis.com/v1beta/models",
                   params={"key": key, "pageSize": 1000}, timeout=20)
     if r.status_code != 200:
         print(f"Gemini   [x] HTTP {r.status_code}: {_scrub(r.text[:200])}")
-        return None
+        return []
     models = [m["name"].removeprefix("models/") for m in r.json().get("models", [])
               if "generateContent" in m.get("supportedGenerationMethods", [])]
     flash = sorted((m for m in models if "flash" in m and "image" not in m and "tts" not in m
                     and "live" not in m and "audio" not in m), key=_flash_rank, reverse=True)
     if not flash:
         print(f"Gemini   [x] key works but no Flash models ({len(models)} models total)")
-        return None
+        return []
     current = os.getenv("GEMINI_MODEL", "")
     print(f"Gemini   [ok] {len(models)} models; Flash: {', '.join(flash[:6])}")
     print(f"         GEMINI_MODEL now {current!r} ({'available' if current in models else 'NOT available'});"
           f" best Flash = {flash[0]!r}")
-    return flash[0]
+    return flash
+
+
+def time_models(models: list[str]) -> str | None:
+    """One tiny generate call per model (a few free-tier requests). Returns the fastest that answered."""
+    import time
+
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"], http_options=types.HttpOptions(timeout=30_000))
+    best: tuple[float, str] | None = None
+    for m in models:
+        cfg = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_level="low") if m.startswith("gemini-3") else None)
+        t0 = time.perf_counter()
+        try:
+            client.models.generate_content(model=m, contents="Reply with the word ok.", config=cfg)
+        except Exception as e:  # noqa: BLE001 - report and move on
+            print(f"         {m:24} [x] {type(e).__name__}: {_scrub(str(e))[:90]}")
+            continue
+        secs = time.perf_counter() - t0
+        print(f"         {m:24} {secs:5.1f}s")
+        if best is None or secs < best[0]:
+            best = (secs, m)
+    return best[1] if best else None
 
 
 def check_serpapi() -> None:
@@ -117,6 +142,7 @@ def main() -> int:
     _safe_stdout()
     p = argparse.ArgumentParser()
     p.add_argument("--write", action="store_true", help="set GEMINI_MODEL in .env to the best Flash model")
+    p.add_argument("--latency", action="store_true", help="time one tiny call per Flash model; --write picks the fastest")
     a = p.parse_args()
     for fn in (check_serpapi, check_nessie):
         try:
@@ -124,10 +150,14 @@ def main() -> int:
         except httpx.HTTPError as e:
             print(f"{fn.__name__[6:].title().replace('Serpapi','SerpApi'):8} [x] cannot reach API: {type(e).__name__}")
     try:
-        best = check_gemini()
+        flash = check_gemini()
     except httpx.HTTPError as e:
         print(f"Gemini   [x] cannot reach API: {type(e).__name__}")
-        best = None
+        flash = []
+    best = flash[0] if flash else None
+    if a.latency and flash:
+        print("Gemini latency (tiny prompt):")
+        best = time_models([m for m in flash if "omni" not in m][:4]) or best
     if a.write and best:
         text = ENV.read_text() if ENV.exists() else ""
         line = f"GEMINI_MODEL={best}"
