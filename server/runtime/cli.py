@@ -27,6 +27,21 @@ from .engine import run_agent
 from .templates import TEMPLATES
 
 
+# Live 5:34 PM: "$249.00 − $199.00" printed as "$249.00 ? $199.00" on a cp1252 console (bad for the demo video).
+_ASCII = str.maketrans({"\u2212": "-", "\u2013": "-", "\u2014": "-", "\u2018": "'", "\u2019": "'",
+                        "\u201c": '"', "\u201d": '"', "\u2026": "...", "\u00d7": "x", "\u2192": "->"})
+
+
+def _console_text(text: str, stream=None) -> str:
+    """Swap typographic characters for ASCII when the console can't encode them."""
+    enc = getattr(stream or sys.stdout, "encoding", None) or "utf-8"
+    try:
+        text.encode(enc)
+        return text
+    except (UnicodeEncodeError, LookupError):
+        return text.translate(_ASCII)
+
+
 def main() -> int:
     # Windows consoles default to cp1252; model answers can contain characters it can't encode.
     for stream in (sys.stdout, sys.stderr):
@@ -83,7 +98,7 @@ def main() -> int:
         extra = json.dumps(s.output, default=str)[:140] if s.output else ""
         flag = "" if s.success else f"  ERROR: {s.error}"
         print(f"  {s.step:>2}. [{s.type:6}] {label:22} {s.ms:>6} ms  {extra}{flag}")
-    print(f"\n{resp.assistant_message or resp.error}\n")
+    print(f"\n{_console_text(resp.assistant_message or resp.error or '')}\n")
     if resp.claims:
         ok = sum(c.verified for c in resp.claims)
         print(f"Fact-check: {ok}/{len(resp.claims)} figures verified" + (" (blocked)" if resp.blocked else ""))

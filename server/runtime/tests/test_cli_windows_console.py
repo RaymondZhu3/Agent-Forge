@@ -63,3 +63,15 @@ def test_cli_without_removes_tools(monkeypatch):
     assert cli.main() == 0
     assert "serpapi_shopping" not in seen["tools"] and "nessie_purchases" in seen["tools"]
     assert seen["instructions"] == "Estimate prices."
+
+
+def test_cli_uses_ascii_minus_on_cp1252_console():
+    """Live 5:34 PM: Gemini's U+2212 minus printed as '?' in the Windows console."""
+    import io
+
+    from server.runtime.cli import _console_text
+
+    cp1252 = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    assert _console_text("$249.00 \u2212 $199.00 = $50.00", cp1252) == "$249.00 - $199.00 = $50.00"
+    utf8 = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+    assert _console_text("a \u2212 b", utf8) == "a \u2212 b"
