@@ -49,7 +49,7 @@ def test_adapter_round_trip(monkeypatch):
 def test_client_has_timeout_and_gemini3_uses_low_thinking(monkeypatch):
     """Real-data bug: a live run hung for minutes waiting on Gemini with no timeout."""
     llm = GeminiLLM(api_key="fake")
-    assert llm._client._api_client._http_options.timeout == 60_000
+    assert llm._client._api_client._http_options.timeout == 30_000
     seen = {}
 
     def fake_generate(model, contents, config):
@@ -104,6 +104,28 @@ def test_all_models_overloaded_gets_one_more_round(monkeypatch):
     assert turn.text == "ok" and turn.model == "gemini-3.5-flash"
     assert set(tried[:6]) == {"gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"}
     assert 4.0 in sleeps
+
+
+def test_504_or_timeout_falls_back_without_retrying_slow_model(monkeypatch):
+    """Live 5:28 PM: gemini-3.5-flash hung 59 s, returned 504 DEADLINE_EXCEEDED, and the run failed."""
+    import httpx
+    from google.genai import errors
+
+    llm = GeminiLLM(api_key="fake")
+    llm._sleep = lambda s: None
+    tried = []
+
+    def fake_generate(model, contents, config):
+        tried.append(model)
+        if model == "gemini-3.5-flash":
+            raise errors.ServerError(504, {"error": {"code": 504, "message": "Deadline expired", "status": "DEADLINE_EXCEEDED"}})
+        if model == "gemini-3.8-flash":
+            raise httpx.ReadTimeout("timed out")
+        return make_resp([types.Part(text="ok")])
+
+    monkeypatch.setattr(llm._client.models, "generate_content", fake_generate)
+    turn = llm.generate("gemini-3.5-flash", "sys", [{"role": "user", "text": "hi"}], [])
+    assert turn.text == "ok" and tried == ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"]
 
 
 def _quota_err(quota_id, delay=None):

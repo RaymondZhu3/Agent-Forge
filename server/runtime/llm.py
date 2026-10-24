@@ -54,7 +54,9 @@ class LLMError(Exception):
 # gemini-2.5-flash returns 404 "no longer available to new users" (Oct 2026); run tools.check_keys --write.
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.8-flash"
 # A Gemini call with no timeout hung a live CLI run for minutes; fail the step instead.
-LLM_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S") or 60)
+# Live 5:28 PM: gemini-3.5-flash hung 59 s then 504 DEADLINE_EXCEEDED; normal steps take 1.5-10 s, so give up sooner
+# and try the next model instead of failing the run.
+LLM_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S") or 30)
 FALLBACK_MODELS = [m.strip() for m in (os.getenv("GEMINI_FALLBACK_MODELS") or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.5-flash").split(",") if m.strip()]
 RETRY_DELAY_S = 1.5
 # Live 5:20 PM: 3.5 and 3.7 both 503'd within seconds and the run failed; spikes are short, so one more round.
@@ -62,6 +64,13 @@ SECOND_ROUND_DELAY_S = 4.0
 # Live 5:25 PM: 429 "exceeded your current quota" on all three models. A per-minute limit says when to come back
 # (retryDelay); wait that long once if it's short. A per-day limit won't recover today: skip that model.
 MAX_QUOTA_WAIT_S = float(os.getenv("GEMINI_MAX_QUOTA_WAIT_S") or 35)
+
+
+def _slow(e: Exception) -> bool:
+    """Client timeout or server 504 DEADLINE_EXCEEDED."""
+    code = getattr(e, "code", None) or getattr(e, "status_code", None)
+    text = str(e).lower()
+    return code == 504 or "deadline_exceeded" in text or "timeout" in type(e).__name__.lower() or "timed out" in text
 
 
 def _quota(e: Exception) -> tuple[str | None, float | None]:
@@ -76,7 +85,7 @@ def _overloaded(e: Exception) -> bool:
     """503 UNAVAILABLE / 429 RESOURCE_EXHAUSTED: worth retrying or switching model; anything else isn't."""
     code = getattr(e, "code", None) or getattr(e, "status_code", None)
     text = str(e)
-    return code in (429, 503) or "UNAVAILABLE" in text or "RESOURCE_EXHAUSTED" in text
+    return _slow(e) or code in (429, 503) or "UNAVAILABLE" in text or "RESOURCE_EXHAUSTED" in text
 
 
 class GeminiLLM:
@@ -136,6 +145,7 @@ class GeminiLLM:
         used = model
         attempts: list[str] = []
         daily_out: set[str] = set()  # models whose per-day quota is spent
+        slow: set[str] = set()  # models that timed out / 504'd this call
         quota_ids: dict[str, str] = {}
         wait_s: float | None = None  # shortest per-minute retryDelay seen
         for i, m in enumerate(candidates + candidates):
@@ -143,7 +153,7 @@ class GeminiLLM:
                 if wait_s is not None and wait_s > MAX_QUOTA_WAIT_S:
                     break
                 self._sleep(max(SECOND_ROUND_DELAY_S, wait_s or 0))
-            if m in daily_out:
+            if m in daily_out or m in slow:
                 continue
             for attempt in range(2 if i < len(candidates) else 1):
                 t0 = time.perf_counter()
@@ -154,9 +164,10 @@ class GeminiLLM:
                 except Exception as e:  # SDK raises various errors; keep internals out of user-facing text
                     code = getattr(e, "code", None) or type(e).__name__
                     attempts.append(f"{m}: {code} ({time.perf_counter() - t0:.1f}s)")
-                    if "timeout" in type(e).__name__.lower() or "timed out" in str(e).lower():
-                        raise LLMError(f"Gemini did not answer within {LLM_TIMEOUT_S:.0f}s") from e
                     last = e
+                    if _slow(e):  # waiting again on a model that just hung costs another LLM_TIMEOUT_S
+                        slow.add(m)
+                        break
                     if not _overloaded(e):
                         raise LLMError(f"Gemini request failed ({type(e).__name__}: {str(e)[:200]})") from e
                     qid, delay = _quota(e)
@@ -177,6 +188,8 @@ class GeminiLLM:
                 which = "; ".join(f"{m}: {q}" for m, q in quota_ids.items())
                 when = f" Per-minute limit: retry in {wait_s:.0f}s." if wait_s is not None else ""
                 raise LLMError(f"Gemini quota exceeded ({which}).{when}") from last
+            if slow and slow | daily_out >= set(candidates):
+                raise LLMError(f"Gemini did not answer within {LLM_TIMEOUT_S:.0f}s (tried {', '.join(candidates)})") from last
             raise LLMError(f"Gemini is overloaded; tried {', '.join(candidates)} ({str(last)[:120]})") from last
 
         cand = (resp.candidates or [None])[0]
