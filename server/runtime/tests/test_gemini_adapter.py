@@ -192,3 +192,39 @@ def test_non_overload_errors_do_not_fall_back(monkeypatch):
     with pytest.raises(LLMError, match="404"):
         llm.generate("gemini-2.5-flash", "sys", [{"role": "user", "text": "hi"}], [])
     assert tried == ["gemini-2.5-flash"]
+
+
+def test_model_that_hung_is_skipped_on_the_next_call(monkeypatch):
+    """Live 5:34 PM: each step of one run waited ~60 s on gemini-3.8-flash before falling back (134 s total)."""
+    from google.genai import errors
+
+    import server.runtime.llm as L
+
+    now = [1000.0]
+    monkeypatch.setattr(L, "_clock", lambda: now[0])
+    monkeypatch.setattr(L, "_cooldown_until", {})
+    monkeypatch.setattr(L, "FALLBACK_MODELS", ["gemini-3.8-flash", "gemini-3.6-flash"])
+    llm = GeminiLLM(api_key="fake")
+    llm._sleep = lambda s: None
+    tried = []
+    healthy = {"gemini-3.6-flash"}
+
+    def fake_generate(model, contents, config):
+        tried.append(model)
+        if model not in healthy:
+            raise errors.ServerError(504, {"error": {"code": 504, "message": "Deadline", "status": "DEADLINE_EXCEEDED"}})
+        return make_resp([types.Part(text="ok")])
+
+    monkeypatch.setattr(llm._client.models, "generate_content", fake_generate)
+    hist = [{"role": "user", "text": "hi"}]
+    assert llm.generate("gemini-3.8-flash", "sys", hist, []).model == "gemini-3.6-flash"
+    assert tried == ["gemini-3.8-flash", "gemini-3.6-flash"]
+
+    tried.clear()
+    assert llm.generate("gemini-3.8-flash", "sys", hist, []).model == "gemini-3.6-flash"
+    assert tried == ["gemini-3.6-flash"]  # 3.8 skipped: it just hung
+
+    tried.clear()
+    now[0] += L.SLOW_COOLDOWN_S + 1
+    healthy.add("gemini-3.8-flash")
+    assert llm.generate("gemini-3.8-flash", "sys", hist, []).model == "gemini-3.8-flash"  # recovered, back first

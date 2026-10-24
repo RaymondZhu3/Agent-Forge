@@ -66,6 +66,27 @@ SECOND_ROUND_DELAY_S = 4.0
 MAX_QUOTA_WAIT_S = float(os.getenv("GEMINI_MAX_QUOTA_WAIT_S") or 35)
 
 
+# Live 5:34 PM: every step of a run paid ~60 s on gemini-3.8-flash (503, then 504 after 29 s) before falling back,
+# because each call started over. Remember failures across calls/runs: a model that just hung or ran out of daily
+# quota goes to the back of the line for a while.
+SLOW_COOLDOWN_S = float(os.getenv("GEMINI_SLOW_COOLDOWN_S") or 300)
+DAILY_COOLDOWN_S = 3600.0
+_cooldown_until: dict[str, float] = {}
+_clock = time.monotonic
+
+
+def _cool(model: str, seconds: float) -> None:
+    _cooldown_until[model] = max(_cooldown_until.get(model, 0.0), _clock() + seconds)
+
+
+def _order(candidates: list[str]) -> list[str]:
+    """Healthy models first (original order), cooling-down ones last (soonest-recovering first)."""
+    now = _clock()
+    healthy = [m for m in candidates if _cooldown_until.get(m, 0.0) <= now]
+    cooling = sorted((m for m in candidates if m not in healthy), key=lambda m: _cooldown_until[m])
+    return healthy + cooling
+
+
 def _slow(e: Exception) -> bool:
     """Client timeout or server 504 DEADLINE_EXCEEDED."""
     code = getattr(e, "code", None) or getattr(e, "status_code", None)
@@ -139,7 +160,7 @@ class GeminiLLM:
             )
 
         # Live runs hit 503 "high demand" on the newest Flash: retry once, then try the fallback models.
-        candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
+        candidates = _order([model] + [m for m in FALLBACK_MODELS if m != model])
         last: Exception | None = None
         resp = None
         used = model
@@ -160,6 +181,7 @@ class GeminiLLM:
                 try:
                     resp = self._client.models.generate_content(model=m, contents=contents, config=config_for(m))
                     used = m
+                    _cooldown_until.pop(m, None)
                     break
                 except Exception as e:  # SDK raises various errors; keep internals out of user-facing text
                     code = getattr(e, "code", None) or type(e).__name__
@@ -167,6 +189,7 @@ class GeminiLLM:
                     last = e
                     if _slow(e):  # waiting again on a model that just hung costs another LLM_TIMEOUT_S
                         slow.add(m)
+                        _cool(m, SLOW_COOLDOWN_S)
                         break
                     if not _overloaded(e):
                         raise LLMError(f"Gemini request failed ({type(e).__name__}: {str(e)[:200]})") from e
@@ -175,6 +198,7 @@ class GeminiLLM:
                         quota_ids[m] = qid
                         if "PerDay" in qid:
                             daily_out.add(m)
+                            _cool(m, DAILY_COOLDOWN_S)
                             break
                     if delay is not None:  # rate-limited: retrying now just burns another request
                         wait_s = delay if wait_s is None else min(wait_s, delay)
