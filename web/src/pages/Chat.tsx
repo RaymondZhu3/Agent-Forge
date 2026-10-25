@@ -155,6 +155,12 @@ function SelfCorrection({ res }: { res: ChatResponse }) {
 function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
   const [showTrace, setShowTrace] = useState(false);
   const sources = useMemo(() => extractUrls(res.assistant_message), [res.assistant_message]);
+  // A figure counts as backed if any mention of it is.
+  const answerMarks = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const c of res.claims) m.set(c.text, (m.get(c.text) ?? false) || c.verified);
+    return m;
+  }, [res.claims]);
   const fixtureOnly = res.data_modes.length > 0 && res.data_modes.every((m) => m === "fixture");
   const failed = res.status === "failed";
 
@@ -175,7 +181,9 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
         {!failed && <SelfCorrection res={res} />}
         {res.assistant_message && (
           <div className="answer">
-            <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
+            <FigureMarks.Provider value={answerMarks}>
+              <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
+            </FigureMarks.Provider>
           </div>
         )}
         {sources.length > 0 && (
