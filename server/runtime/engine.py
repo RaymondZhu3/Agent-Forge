@@ -102,6 +102,14 @@ def build_system_prompt(agent: AgentConfig, tools: list[Tool]) -> str:
     )
 
 
+def _safe(fn, *args):
+    """Receipts are best-effort: odd data (e.g. NaN) skips the receipt instead of failing the run."""
+    try:
+        return fn(*args)
+    except Exception:
+        return None
+
+
 def _preview(data: Any) -> Any:
     """Small, safe preview of search results for the run trace (no bank data)."""
     if not isinstance(data, dict):
@@ -245,7 +253,7 @@ def run_agent(
                     input=call.args,
                     output={"summary": tool.summarize(res), "mode": res.mode if res.ok else None, "preview": _preview(res.data),
                         # fingerprint of the full raw tool data (not stored); covered by the run's receipt
-                        **({"data_sha256": data_hash(res.data)} if res.ok else {})},
+                        **({"data_sha256": _safe(data_hash, res.data)} if res.ok else {})},
                     ms=res.duration_ms,
                     success=res.ok,
                     cached=res.cached,
@@ -326,6 +334,8 @@ def run_agent(
     }
     record = {"step": len(steps) + 1, "type": "verify", "tool_name": None, "input": {"mode": mode, "stage": stage},
               "output": out, "success": True, "error": None}
-    out["receipt"] = receipt_chain(run_id, agent.id, message, [s.model_dump() for s in steps] + [record], answer)
+    rc = _safe(receipt_chain, run_id, agent.id, message, [s.model_dump() for s in steps] + [record], answer)
+    if rc is not None:  # a receipt must never cost the user their answer
+        out["receipt"] = rc
     add_step(type="verify", input=record["input"], output=out, ms=int((time.perf_counter() - t0) * 1000))
     return finish("completed", answer, claims=claims, blocked=blocked)

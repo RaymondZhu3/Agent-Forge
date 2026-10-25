@@ -75,3 +75,14 @@ def test_number_format_matches_javascript():
     for x, js in cases.items():
         assert _js_number(x) == js, (x, _js_number(x), js)
     assert canonical({"b": [1, 2.5, None, True], "a": "é\n\"x\""}) == '{"a":"é\\n\\"x\\"","b":[1,2.5,null,true]}'
+
+
+def test_unhashable_tool_data_skips_the_receipt_but_not_the_answer(monkeypatch):
+    """Receipts are best-effort: a NaN in tool data must not fail the run."""
+    import server.runtime.engine as E
+
+    monkeypatch.setattr(E, "data_hash", lambda d: (_ for _ in ()).throw(ValueError("nan")))
+    monkeypatch.setattr(E, "receipt_chain", lambda *a: (_ for _ in ()).throw(ValueError("nan")))
+    r, _ = run_once()
+    assert r.status == "completed" and r.assistant_message
+    assert "receipt" not in r.steps[-1].output
