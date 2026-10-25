@@ -198,3 +198,33 @@ def test_nessie_defaults_to_the_live_host(monkeypatch):
 
     monkeypatch.delenv("NESSIE_BASE_URL", raising=False)
     assert nessie._base() == "https://api.nessieisreal.com"
+
+
+
+def test_serpapi_bad_location_retries_without_it_and_local_puts_place_in_query(monkeypatch):
+    """Live 7:30 PM: model passed location "UT Austin" -> SerpApi HTTP 400, both local searches failed."""
+    import httpx
+
+    from tools import serpapi
+    monkeypatch.setenv("SERPAPI_KEY", "test")
+    monkeypatch.delenv("SERPAPI_MOCK", raising=False)
+    monkeypatch.delenv("SERPAPI_CACHE_ONLY", raising=False)
+    monkeypatch.setattr(serpapi, "cache_get", lambda k: None)
+    monkeypatch.setattr(serpapi, "cache_set", lambda *a, **k: None)
+    seen = []
+
+    def fake_get(url, params, timeout):
+        seen.append(dict(params))
+        req = httpx.Request("GET", url)
+        if params.get("location") == "Nowhere, Mars":
+            return httpx.Response(400, json={"error": "Unsupported `Nowhere, Mars` location - location parameter."}, request=req)
+        return httpx.Response(200, json={"local_results": [{"title": "Caswell Tennis Center", "address": "2312 Shoal Creek Blvd"}]}, request=req)
+
+    monkeypatch.setattr(serpapi.httpx, "get", fake_get)
+    data, _, _ = serpapi.serp_request("serpapi_local_places", {"engine": "google_local", "q": "tennis", "location": "Nowhere, Mars"})
+    assert data["local_results"] and "location" not in seen[-1] and len(seen) == 2
+
+    seen.clear()
+    out, _, _ = serpapi._local({"query": "tennis courts", "location": "UT Austin"}, {"location": "Austin, Texas"})
+    assert seen[0]["q"] == "tennis courts near UT Austin" and seen[0]["location"] == "Austin, Texas"
+    assert out["places"][0]["name"] == "Caswell Tennis Center"

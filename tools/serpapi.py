@@ -46,6 +46,23 @@ def _use_fixtures() -> bool:
     return not os.getenv("SERPAPI_KEY") or os.getenv("SERPAPI_MOCK") == "1"
 
 
+def _get(params: dict[str, Any]) -> httpx.Response:
+    try:
+        return httpx.get(ENDPOINT, params={**params, "api_key": os.environ["SERPAPI_KEY"]}, timeout=TIMEOUT_S)
+    except httpx.TimeoutException:
+        raise ToolError("SerpApi timed out")
+    except httpx.HTTPError:
+        raise ToolError("Could not reach SerpApi")
+
+
+def _reason(res: httpx.Response) -> str:
+    """SerpApi's own short error message (never contains the key)."""
+    try:
+        return str(res.json().get("error") or "")[:160]
+    except ValueError:
+        return ""
+
+
 def serp_request(tool_name: str, params: dict[str, Any]) -> tuple[dict[str, Any], bool, bool]:
     """Returns (raw_json, cached, fixture). Never logs or returns the API key."""
     params = {k: v for k, v in params.items() if v not in (None, "")}
@@ -59,18 +76,18 @@ def serp_request(tool_name: str, params: dict[str, Any]) -> tuple[dict[str, Any]
     if os.getenv("SERPAPI_CACHE_ONLY") == "1":
         raise ToolError("No cached result for this search (cache-only mode is on)")
 
-    try:
-        res = httpx.get(ENDPOINT, params={**params, "api_key": os.environ["SERPAPI_KEY"]}, timeout=TIMEOUT_S)
-    except httpx.TimeoutException:
-        raise ToolError("SerpApi timed out")
-    except httpx.HTTPError:
-        raise ToolError("Could not reach SerpApi")
+    res = _get(params)
+    # Live 7:30 PM (web, Court Scout): the model passed location "UT Austin" -> HTTP 400 "Unsupported location".
+    # SerpApi only accepts its canonical locations; retry once without it rather than failing the tool.
+    if res.status_code == 400 and params.get("location"):
+        params = {k: v for k, v in params.items() if k != "location"}
+        res = _get(params)
     if res.status_code == 401:
         raise ToolError("SerpApi rejected the API key")
     if res.status_code == 429:
         raise ToolError("SerpApi search limit reached")
     if res.status_code >= 400:
-        raise ToolError(f"SerpApi returned HTTP {res.status_code}")
+        raise ToolError(f"SerpApi returned HTTP {res.status_code}" + (f": {_reason(res)}" if _reason(res) else ""))
     data = res.json()
     if data.get("error"):
         # SerpApi returns e.g. "Google hasn't returned any results for this query." — treat as empty, not failure
@@ -284,10 +301,17 @@ serpapi_web_search = Tool(
 # ---------------- Local places ----------------
 
 def _local(input: dict[str, Any], settings: dict[str, Any]):
-    location = input.get("location") or settings.get("location") or "Austin, Texas"
+    # The model's free-text place ("UT Austin") goes into the query; SerpApi's `location` must be a canonical
+    # location, so it stays the agent's configured city.
+    city = settings.get("location") or "Austin, Texas"
+    near = (input.get("location") or "").strip()
+    query = input["query"].strip()
+    if near and near.lower() not in query.lower() and near.lower() != city.lower():
+        query = f"{query} near {near}"
+    location = near or city
     raw, cached, fixture = serp_request(
         "serpapi_local_places",
-        {"engine": "google_local", "q": input["query"].strip(), "location": location, "gl": "us", "hl": "en"},
+        {"engine": "google_local", "q": query, "location": city, "gl": "us", "hl": "en"},
     )
     places = [
         {
