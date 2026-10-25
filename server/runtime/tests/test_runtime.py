@@ -406,3 +406,14 @@ def test_demo_account_reads_the_agents_bank_tools():
     d = demo_account(agent())
     assert d["purchases"]["purchase_count"] == 11 and d["bills"]["recurring_monthly_total"] == 121.98
     assert d["modes"]["purchases"] == "fixture"
+
+
+
+def test_same_price_in_two_searches_cites_the_matching_one():
+    """Live 10:15 PM: Spotify's $10.99 was sourced to step 5 (the AT&T search) because that came first."""
+    outputs = [
+        (5, "serpapi_web_search", {"results": [{"title": "AT&T plans", "snippet": "Add a line from $10.99/mo with AT&T Value."}]}),
+        (7, "serpapi_web_search", {"results": [{"title": "Spotify Premium plans", "snippet": "Spotify Basic is $10.99/month."}]}),
+    ]
+    _, claims, _ = verify_answer("Spotify offers a Basic plan at $10.99 a month.", outputs, "flag")
+    assert claims[0].verified and claims[0].source_step == 7

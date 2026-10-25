@@ -89,14 +89,27 @@ def _sentence(text: str, start: int, end: int) -> str:
     return text[left:right].strip(" *-•\t")[:240]
 
 
-def _best_exact(value: float, evidence: list[Evidence]) -> Evidence | None:
-    """Exact match; when several records hold the same number, prefer a specific item (a listing, purchase, bill)
-    over a summary total ("spent at Amazon: $109.99"), so the evidence card can show what was actually bought."""
+WORD_RE = re.compile(r"[a-z][a-z0-9&']{2,}")
+STOP = {"the", "and", "for", "you", "your", "with", "this", "that", "from", "are", "per", "month", "plan", "price", "plans"}
+
+
+def _words(x: Any) -> set[str]:
+    text = " ".join(str(v) for v in x.values() if isinstance(v, str)) if isinstance(x, dict) else str(x or "")
+    return {w for w in WORD_RE.findall(text.lower()) if w not in STOP}
+
+
+def _best_exact(value: float, evidence: list[Evidence], context: str = "") -> Evidence | None:
+    """Exact match. When several records hold the same number: prefer the one that talks about the same thing as
+    the sentence (live: Spotify's "$10.99" was credited to the AT&T search because that came first), then a specific
+    item (listing, purchase, bill) over a summary total ("spent at Amazon: $109.99")."""
     hits = [e for e in evidence if abs(e.value - value) <= TOL]
-    if not hits:
-        return None
-    specific = [e for e in hits if isinstance(e.item, dict) and any(e.item.get(k) for k in ("title", "name", "description", "payee"))]
-    return (specific or hits)[0]
+    if len(hits) <= 1:
+        return hits[0] if hits else None
+    ctx = _words(context)
+    def score(e: Evidence) -> tuple[int, int]:
+        specific = int(isinstance(e.item, dict) and any(e.item.get(k) for k in ("title", "name", "description", "payee")))
+        return (len(ctx & _words(e.item)) if ctx else 0, specific)
+    return max(hits, key=score)  # max() keeps the first of equal scores
 
 
 def _match(value: float, evidence: list[Evidence], percent: bool) -> tuple[Evidence | None, str | None, Evidence | None]:
@@ -146,8 +159,8 @@ def find_claims_detailed(answer: str, evidence: list[Evidence]) -> tuple[list[tu
             hits.append((m, percent, float(m.group(1).replace(",", ""))))
 
     exact: dict[int, Evidence] = {}
-    for i, (_, percent, value) in enumerate(hits):
-        ev = _best_exact(value, evidence)
+    for i, (m, percent, value) in enumerate(hits):
+        ev = _best_exact(value, evidence, _sentence(answer, m.start(), m.end()))
         if ev is not None:
             exact[i] = ev
     how_of = {i: "exact" for i in exact}
