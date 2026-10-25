@@ -261,3 +261,10 @@ def test_saving_cites_the_prices_it_came_from_not_a_coincidental_purchase():
     assert sixty.verified and sixty.how == "annualized" and sixty.source_tool == "nessie_bills"
     elevens = [c for c in claims if c.text == "$11.99"]
     assert all(c.how == "exact" and c.source_tool == "nessie_bills" for c in elevens)
+
+
+def test_claim_context_does_not_stop_at_a_domain_dot():
+    """Web demo: the context of "$189.99 at [Amazon.com](...)" was cut to "Lowest price found: $189.99 at [Amazon."."""
+    outputs = [(3, "serpapi_shopping", {"lowest_price": 189.99})]
+    _, claims, _ = verify_answer("Lowest price found: $189.99 at Amazon.com today. Next sentence.", outputs, "flag")
+    assert claims[0].context == "Lowest price found: $189.99 at Amazon.com today."

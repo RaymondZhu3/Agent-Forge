@@ -56,7 +56,8 @@ def collect_numbers(data: Any, step: int, tool: str, out: list[Evidence], key: s
 
 
 SAVING_RE = re.compile(r"sav|=|differen|less|cheaper|lower", re.I)
-BOUNDARY_RE = re.compile(r"[!?\n]|\.(?!\d)")
+# "Amazon.com" and "$1.50" are not sentence ends: a dot followed by a letter or digit isn't a boundary.
+BOUNDARY_RE = re.compile(r"[!?\n]|\.(?![\w])")
 
 
 def _sentence(text: str, start: int, end: int) -> str:
