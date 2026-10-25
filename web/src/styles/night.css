@@ -50,3 +50,24 @@ h5 { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--tx-2
 /* In the self-correction draft, made-up figures are crossed out, not alarmed */
 .sc-draft .fig.u { background: transparent; color: var(--err); border-color: color-mix(in srgb, var(--err) 55%, transparent); text-decoration: line-through; text-decoration-thickness: 2px; }
 .sc-draft .fig.u::before { content: none; }
+
+/* ---------- audit receipt ---------- */
+.receipt { border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--s0); padding: 10px 12px; display: grid; gap: 6px; }
+.card .receipt { border: 0; padding: 0; background: none; }
+.receipt.intact { border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.receipt.broken { border-color: color-mix(in srgb, var(--err) 55%, transparent); }
+.rc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rc-icon { color: var(--accent); flex: none; }
+.rc-main { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 180px; flex-wrap: wrap; font-size: 13px; }
+.rc-hash { color: var(--tx-2); font-size: 12px; letter-spacing: 0.02em; }
+.rc-result { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; font-weight: 600; }
+.rc-result.ok { color: var(--ok); } .rc-result.bad { color: var(--err); }
+.rc-reason { margin: 0; }
+.rc-toggle { width: fit-content; font-size: 12px; }
+.rc-chain { list-style: none; margin: 0; padding: 8px 10px; display: grid; gap: 4px; background: var(--bg); border: 1px dashed var(--line-2); border-radius: var(--r2); font-size: 12px; }
+.rc-chain li { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: baseline; }
+.rc-chain .mono { color: var(--tx-2); }
+.rc-chain .rc-final { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 2px; font-weight: 600; }
+.rc-note { margin: 0; font-size: 11.5px; }
+.rc-chain li.bad, .rc-chain li.bad .mono { color: var(--err); font-weight: 600; }
+.rc-chain li.bad > span:nth-child(2)::after { content: " (changed after the run)"; font-weight: 500; }

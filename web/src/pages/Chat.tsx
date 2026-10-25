@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
 import Markdown, { FigureMarks } from "../components/Markdown";
+import Receipt from "../components/Receipt";
 import ToolIcon from "../components/ToolIcon";
 import Trace, { stepLabel } from "../components/Trace";
 import { EmptyState, ErrorBanner, ModeBadge, Skeleton, StatusPill, modeOf } from "../components/ui";
@@ -216,6 +217,7 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
           </div>
         )}
         {!failed && <FactCheck claims={res.claims} blocked={res.blocked} mode={agent.guardrails.fact_check} />}
+        {!failed && <Receipt runId={res.run_id} steps={res.steps} />}
         <div className="turn-foot">
           <button className="link-btn" onClick={() => setShowTrace(!showTrace)} aria-expanded={showTrace}>
             <FileSearch size={13} /> Execution · {res.steps.length} steps
