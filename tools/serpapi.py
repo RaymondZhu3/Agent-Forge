@@ -176,6 +176,12 @@ def _shopping(input: dict[str, Any], settings: dict[str, Any]):
         "highest_price": max(prices) if prices else None,
         "excluded_listings": excluded,
     }
+    if not products:
+        # Live 8:37 PM: 'AirPods Pro 2' returned 40 listings, all AirPods Max / resale / refurbished; the agent gave up.
+        data["hint"] = (
+            f"All {sum(excluded.values())} listings were excluded (used/resale, parts, or a different model). "
+            "Try once more with the full product name, e.g. brand + model + generation + variant."
+        )
     return data, cached, fixture
 
 
@@ -196,7 +202,8 @@ serpapi_shopping = Tool(
         "Look up current prices for a specific product across online stores (Google Shopping). "
         "Returns NEW items from named retailers that match the product name (used, resale, parts and "
         "other models are excluded and only counted). lowest_price prefers major retailers (trusted_retailer). "
-        "Quote prices from trusted retailers when available. Use a specific product name, not a category."
+        "Quote prices from trusted retailers when available. Use a specific product name, not a category. "
+        "If no products come back, retry once with the full product name (see hint)."
     ),
     parameters={
         "type": "object",

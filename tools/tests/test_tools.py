@@ -228,3 +228,17 @@ def test_serpapi_bad_location_retries_without_it_and_local_puts_place_in_query(m
     out, _, _ = serpapi._local({"query": "tennis courts", "location": "UT Austin"}, {"location": "Austin, Texas"})
     assert seen[0]["q"] == "tennis courts near UT Austin" and seen[0]["location"] == "Austin, Texas"
     assert out["places"][0]["name"] == "Caswell Tennis Center"
+
+
+
+def test_shopping_with_everything_excluded_tells_the_model_to_refine(monkeypatch):
+    """Live 8:37 PM: 40 listings for 'AirPods Pro 2', all AirPods Max / Mercari / refurbished -> 'no products'."""
+    from tools import serpapi
+
+    raw = {"shopping_results": [
+        {"title": "Apple AirPod Pro Max - New", "source": "Mercari", "extracted_price": 360.0},
+        {"title": "Apple AirPods Pro 2nd Gen", "source": "eBay", "extracted_price": 125.0, "second_hand_condition": "pre-owned"},
+    ]}
+    monkeypatch.setattr(serpapi, "serp_request", lambda *a, **k: (raw, False, False))
+    data, _, _ = serpapi._shopping({"query": "AirPods Pro 2"}, {})
+    assert data["products"] == [] and "full product name" in data["hint"]
