@@ -29,7 +29,7 @@ export default function AuditPanel({ agentId, limit = 25 }: { agentId?: string; 
         tally.figures += final.claims ?? run.claims_total ?? 0;
         tally.backed += final.verified ?? run.claims_verified ?? 0;
         tally.user += new Set(final.user_supplied ?? []).size;
-        tally.madeUp += draft?.invented?.length ?? 0;
+        tally.madeUp += new Set(draft?.invented ?? []).size;  // distinct figures, like "fixed"
         tally.corrected += final.used_correction ? final.fixed?.length ?? 0 : 0;
         if (receiptOf(run.steps)) {
           tally.receipts++;

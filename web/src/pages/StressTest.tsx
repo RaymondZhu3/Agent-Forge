@@ -42,7 +42,8 @@ function analyze(res: ChatResponse) {
   const v = res.steps.filter((s) => s.type === "verify").map((s) => (s.output ?? {}) as VOut);
   const draft = v.find((o) => o.draft !== undefined);
   const final = v[v.length - 1] ?? {};
-  const madeUp = draft?.invented?.length ?? final.invented?.length ?? 0;
+  // Count distinct figures, not mentions: a made-up "$10.00" repeated twice is one figure (and is "fixed" once).
+  const madeUp = new Set(draft?.invented ?? final.invented ?? []).size;
   const corrected = final.used_correction ? final.fixed?.length ?? 0 : 0;
   const user = new Set(final.user_supplied ?? []).size;
   const leftFlagged = new Set(final.invented ?? []).size;
