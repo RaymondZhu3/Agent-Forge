@@ -1,0 +1,28 @@
+/* Light variant of the Night audit theme: same structure and accents, light surfaces.
+   Activated by <html data-theme="light"> (sidebar toggle, remembered per browser). */
+:root[data-theme="light"] {
+  --bg: #f4f6fb; --s0: #ffffff; --s1: #f2f4fa; --s2: #e7ebf4; --s3: #dce2ee; --line: #dde2ec; --line-2: #c9d1e1;
+  --tx: #131b2f; --tx-2: #4a5470; --tx-3: #7a849c; --blue: #4f5bd5; --violet: #4f5bd5; --grad: #4f5bd5;
+  --accent: #4f5bd5; --on-accent: #ffffff; --link: #3f4bc4; --bubble: #e3e7fb; --ok: #0e8a5c; --err: #cf3540;
+  --warn: #a86a00; --cyan: #1f7fa0; --grad-soft: rgba(79, 91, 213, 0.1);
+  --focus: 0 0 0 2px var(--bg), 0 0 0 4px #4f5bd5;
+  --shadow: 0 1px 2px rgba(19, 27, 47, 0.06);
+  color-scheme: light;
+}
+:root[data-theme="light"] body { background: var(--bg); }
+:root[data-theme="light"] .side { background: #ffffff; border-right: 1px solid var(--line); }
+:root[data-theme="light"] .nav-item:hover, :root[data-theme="light"] .nav-item.active { background: var(--s2); }
+:root[data-theme="light"] .panel.cfg, :root[data-theme="light"] .panel.lib { background: var(--s1); }
+:root[data-theme="light"] .composer { background: linear-gradient(180deg, transparent, var(--bg) 30%); }
+:root[data-theme="light"] .modal-scrim { background: rgba(19, 27, 47, 0.35); }
+:root[data-theme="light"] .story-why { color: var(--tx) !important; }
+:root[data-theme="light"] .src-link:hover { color: var(--accent); }
+:root[data-theme="light"] .fig.v { color: #0b6e4b; }
+:root[data-theme="light"] .fig.u { color: #b4232c; }
+:root[data-theme="light"] .fig-tip, :root[data-theme="light"] .ev-card { background: #ffffff; box-shadow: 0 10px 28px rgba(19, 27, 47, 0.16); }
+:root[data-theme="light"] .fig-tip.u { color: #b4232c; }
+:root[data-theme="light"] .acct { box-shadow: -12px 0 32px rgba(19, 27, 47, 0.14); }
+:root[data-theme="light"] .tooltip { background: #131b2f; color: #fff; }
+:root[data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--s3); border-color: var(--bg); }
+
+.theme-toggle { display: inline-flex; gap: 8px; align-items: center; width: 100%; justify-content: flex-start; }

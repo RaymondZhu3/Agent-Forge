@@ -1,4 +1,5 @@
-import { Activity, LayoutGrid, PenTool, Radio } from "lucide-react";
+import { Activity, LayoutGrid, Moon, PenTool, Radio, Sun } from "lucide-react";
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAsync } from "../lib/hooks";
@@ -23,6 +24,22 @@ const NAV = [
   { to: "/builder", label: "Builder", icon: PenTool, end: false },
   { to: "/dashboard", label: "Observability", icon: Activity, end: false },
 ];
+
+function ThemeToggle() {
+  const [light, setLight] = useState(() => document.documentElement.dataset.theme === "light");
+  const flip = () => {
+    const next = !light;
+    if (next) document.documentElement.dataset.theme = "light";
+    else delete document.documentElement.dataset.theme;
+    try { localStorage.setItem("af-theme", next ? "light" : "dark"); } catch { /* storage unavailable */ }
+    setLight(next);
+  };
+  return (
+    <button className="btn ghost sm theme-toggle" onClick={flip} aria-pressed={light}>
+      {light ? <Moon size={14} /> : <Sun size={14} />} {light ? "Dark mode" : "Light mode"}
+    </button>
+  );
+}
 
 function HealthDot() {
   const { data, error } = useAsync(() => api.health(), []);
@@ -63,6 +80,7 @@ export default function Shell() {
           <div className="tagline">
             <Radio size={12} /> Other platforms help you build agents. We help you trust them.
           </div>
+          <ThemeToggle />
           <HealthDot />
         </div>
       </aside>

@@ -292,20 +292,24 @@ function AgentTurn({ res, agent, question }: { res: ChatResponse; agent: AgentCo
 
 /** Line from a figure chip to the "Data used" card it came from, plus a one-line explanation. */
 function FigureSource({ body, chip, f, children }: { body: HTMLDivElement | null; chip: HTMLElement; f: FigureInfo; children?: React.ReactNode }) {
-  const [geo, setGeo] = useState<{ x1: number; y1: number; x2: number; y2: number; w: number; h: number; tipX: number; tipY: number } | null>(null);
+  const [geo, setGeo] = useState<{ x1: number; y1: number; x2: number; y2: number; w: number; h: number; tipX: number; tipY: number; above: boolean } | null>(null);
   useLayoutEffect(() => {
     if (!body) return;
     const b = body.getBoundingClientRect();
     const c = chip.getBoundingClientRect();
     const card = f.ok && f.step != null ? body.querySelector<HTMLElement>(`.du-card[data-step="${f.step}"]`) : null;
     const k = card?.getBoundingClientRect();
+    // Open the evidence card above the chip when the visible area below it is too short.
+    const view = chip.closest(".thread")?.getBoundingClientRect();
+    const above = !!children && !!view && view.bottom - c.bottom < 280 && c.top - view.top > 280;
     setGeo({
+      above,
       x1: c.left - b.left + c.width / 2, y1: c.top - b.top,
       x2: k ? k.left - b.left + k.width / 2 : 0, y2: k ? k.bottom - b.top : 0,
       w: b.width, h: b.height,
-      tipX: Math.min(Math.max(c.left - b.left + c.width / 2, 170), b.width - 170), tipY: c.bottom - b.top + 6,
+      tipX: Math.min(Math.max(c.left - b.left + c.width / 2, 170), b.width - 170), tipY: above ? c.top - b.top - 6 : c.bottom - b.top + 6,
     });
-  }, [body, chip, f]);
+  }, [body, chip, f, children]);
   if (!geo) return null;
   const hasLine = f.ok && geo.y2 > 0;
   const midY = (geo.y1 + geo.y2) / 2;
@@ -319,7 +323,7 @@ function FigureSource({ body, chip, f, children }: { body: HTMLDivElement | null
         </svg>
       )}
       {children ? (
-        <div className="ev-anchor" style={{ left: geo.tipX, top: geo.tipY }}>{children}</div>
+        <div className={`ev-anchor${geo.above ? " above" : ""}`} style={{ left: geo.tipX, top: geo.tipY }}>{children}</div>
       ) : (
         <div className={`fig-tip${f.ok ? "" : " u"}`} style={{ left: geo.tipX, top: geo.tipY }} role="tooltip">
           {describeFigure(f)}
