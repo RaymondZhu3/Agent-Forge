@@ -161,3 +161,15 @@ h5 { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--tx-2
 .cmp-wait { display: flex; gap: 8px; align-items: center; color: var(--accent); margin: 0; }
 .cmp-foot { margin: 0; color: var(--tx-2); }
 @media (max-width: 900px) { .cmp-grid { grid-template-columns: 1fr; } .cmp-ask { flex-direction: column; } }
+
+/* ---------- trust stats ---------- */
+.trust { display: inline-flex; gap: 6px; align-items: center; color: var(--ok); font-weight: 500; }
+.trust.muted { color: var(--tx-3); }
+.audit .audit-big { display: flex; gap: 10px; align-items: center; color: var(--ok); margin-bottom: 12px; flex-wrap: wrap; }
+.audit.bad .audit-big { color: var(--err); }
+.audit .audit-big strong { font-size: 19px; color: var(--tx); }
+.audit-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.audit-stats div { display: grid; gap: 2px; }
+.audit-stats dt { font-size: 11.5px; color: var(--tx-3); }
+.audit-stats dd { margin: 0; font-size: 22px; font-weight: 600; }
+@media (max-width: 820px) { .audit-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

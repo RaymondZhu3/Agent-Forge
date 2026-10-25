@@ -1,5 +1,6 @@
 import { Activity, Gauge, RefreshCw, ShieldCheck, Timer, Coins, Cpu, Database, Search } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import AuditPanel from "../components/AuditPanel";
 import { RunsChart, ToolBars } from "../components/Charts";
 import { EmptyState, ErrorBanner, Skeleton, StatusPill } from "../components/ui";
 import { api } from "../lib/api";
@@ -81,6 +82,8 @@ export default function Dashboard() {
           </>
         )}
       </div>
+
+      <AuditPanel key={agentId || "all"} agentId={agentId || undefined} />
 
       <div className="grid2">
         <section className="card">

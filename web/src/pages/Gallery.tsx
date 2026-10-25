@@ -1,4 +1,4 @@
-import { ArrowRight, Eye, MessageSquare, PenTool, Plus, Settings2, Trash2, X } from "lucide-react";
+import { ArrowRight, Eye, MessageSquare, PenTool, Plus, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
@@ -57,6 +57,18 @@ function TemplatePreview({ tpl, tools, onClose }: { tpl: AgentCreate; tools: Too
   );
 }
 
+/** "Audited · 312 figures checked in 40 runs", from the stored runs. */
+function TrustBadge({ agentId }: { agentId: string }) {
+  const runs = useAsync(() => api.runs({ agent_id: agentId, limit: 500 }), [agentId]);
+  if (!runs.data) return null;
+  const done = runs.data.filter((r) => r.status === "completed");
+  const figures = done.reduce((n, r) => n + (r.claims_total ?? 0), 0);
+  if (!done.length) return <div className="trust sm muted"><ShieldCheck size={12} /> No runs yet</div>;
+  return (
+    <div className="trust sm"><ShieldCheck size={12} /> Audited · {figures.toLocaleString()} figures checked in {done.length.toLocaleString()} {done.length === 1 ? "run" : "runs"}</div>
+  );
+}
+
 function AgentRow({ a, onDelete }: { a: AgentConfig; onDelete: (a: AgentConfig) => void }) {
   return (
     <li className="agent-card">
@@ -69,6 +81,7 @@ function AgentRow({ a, onDelete }: { a: AgentConfig; onDelete: (a: AgentConfig) 
         <div className="muted sm">
           {templateLabel(a.template)} · <span className="mono">{a.model}</span> · v{a.version} · updated {relTime(a.updated_at)}
         </div>
+        <TrustBadge agentId={a.id} />
         <div className="chips">
           {a.tools.map((t) => (
             <span key={t.name} className="chip mono"><ToolIcon name={t.name} size={10} />{t.name.replace(/^(serpapi|nessie)_/, "")}</span>
