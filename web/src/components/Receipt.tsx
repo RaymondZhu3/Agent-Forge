@@ -10,6 +10,7 @@ const short = (h: string) => `${h.slice(0, 10)}…${h.slice(-6)}`;
 export default function Receipt({ runId, steps, run }: { runId: string; steps: RunStep[]; run?: Run }) {
   const receipt = receiptOf(steps);
   const [check, setCheck] = useState<ReceiptCheck | { error: string } | null>(null);
+  const [server, setServer] = useState<{ ok: boolean; reason: string; signature?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   if (!receipt) return null;
@@ -19,14 +20,19 @@ export default function Receipt({ runId, steps, run }: { runId: string; steps: R
     try {
       // Always check the record as stored on the server, not the copy this page received.
       const stored = run ?? (await api.run(runId));
-      setCheck(await verifyRun(stored));
+      const [local, srv] = await Promise.all([verifyRun(stored), api.verifyRunOnServer(runId).catch(() => null)]);
+      setCheck(local);
+      setServer(srv);
     } catch (e) {
       setCheck({ error: (e as Error).message });
     } finally {
       setBusy(false);
     }
   };
-  const result = check && "ok" in check ? check : null;
+  const local = check && "ok" in check ? check : null;
+  // A receipt is intact only if the browser's chain check passes AND (when signed) the server's signature check does.
+  const sigBad = server?.signature === "invalid";
+  const result = local ? { ...local, ok: local.ok && !sigBad, reason: sigBad ? server!.reason : local.reason } : null;
 
   return (
     <div className={`receipt${result ? (result.ok ? " intact" : " broken") : ""}`}>
@@ -35,6 +41,7 @@ export default function Receipt({ runId, steps, run }: { runId: string; steps: R
         <div className="rc-main">
           <strong>Audit receipt</strong>
           <span className="mono rc-hash" title={receipt.hash}>{short(receipt.hash)}</span>
+          {receipt.sig && <span className="pill info rc-signed" title={`Signed with server key ${receipt.key_id}`}>Signed</span>}
         </div>
         {result ? (
           <span className={`rc-result ${result.ok ? "ok" : "bad"}`} role="status">
@@ -48,6 +55,7 @@ export default function Receipt({ runId, steps, run }: { runId: string; steps: R
         </button>
       </div>
       {result && <p className="rc-reason sm muted">{result.reason}</p>}
+      {result?.ok && server?.signature === "valid" && <p className="rc-reason sm ok-t">Signature valid (server key {receipt.key_id}). The record can't be rewritten without that key.</p>}
       <button className="link-btn rc-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
         <ChevronDown size={12} className={`chev${open ? " open" : ""}`} /> {open ? "Hide" : "Show"} the fingerprint chain
       </button>
@@ -63,7 +71,7 @@ export default function Receipt({ runId, steps, run }: { runId: string; steps: R
           <li className={`rc-final${result && !result.ok && result.badIndex === receipt.steps.length ? " bad" : ""}`}><span className="dim">answer</span><span>final receipt</span><span className="mono">{short(receipt.hash)}</span></li>
         </ol>
       )}
-      <p className="rc-note sm dim">SHA-256 chain over the question, every step and the answer. Changing anything in the stored record breaks it.</p>
+      <p className="rc-note sm dim">SHA-256 chain over the question, every step and the answer{receipt.sig ? ", signed by the server" : ""}. Changing anything in the stored record breaks it.</p>
     </div>
   );
 }

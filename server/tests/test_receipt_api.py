@@ -26,3 +26,12 @@ def test_demo_account_and_draft_routes(client):  # noqa: F811
     use_llm(ScriptedLLM(LLMTurn('{"name": "Court Scout", "instructions": "1. Find courts.", "tools": ["serpapi_local_places"]}', [])))
     d = client.post("/api/agents/draft", json={"description": "finds tennis courts near campus"})
     assert d.status_code == 200 and d.json()["tools"][0]["name"] == "serpapi_local_places"
+
+
+def test_server_verify_route_checks_the_signature(client, monkeypatch):  # noqa: F811
+    monkeypatch.setenv("RECEIPT_SECRET", "route-secret")
+    use_llm(smart_spend_script())
+    run_id = client.post("/api/agents/agent-smart-spend/chat", json={"message": "Find savings", "session_id": "sig"}).json()["run_id"]
+    v = client.get(f"/api/runs/{run_id}/verify").json()
+    assert v["ok"] and v["signature"] == "valid"
+    assert client.get("/api/runs/missing/verify").status_code == 404

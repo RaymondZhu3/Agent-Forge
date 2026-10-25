@@ -86,3 +86,35 @@ def test_unhashable_tool_data_skips_the_receipt_but_not_the_answer(monkeypatch):
     r, _ = run_once()
     assert r.status == "completed" and r.assistant_message
     assert "receipt" not in r.steps[-1].output
+
+
+def test_signed_receipt_catches_a_rewritten_chain(monkeypatch):
+    """With RECEIPT_SECRET, someone who edits the answer AND recomputes the whole chain still fails the signature."""
+    from server.runtime.receipt import chain
+
+    monkeypatch.setenv("RECEIPT_SECRET", "test-secret")
+    r, hooks = run_once()
+    rc = r.steps[-1].output["receipt"]
+    assert rc["sig"] and len(rc["key_id"]) == 8
+    run = stored_run(r, hooks)
+    ok = verify_run(run)
+    assert ok["ok"] and ok["signature"] == "valid"
+
+    # the attacker edits the answer and recomputes every hash, but can't sign without the key
+    forged = copy.deepcopy(run)
+    forged["assistant_message"] = forged["assistant_message"].replace("$189.99", "$149.99")
+    redo = chain(forged["id"], forged["agent_id"], forged["user_message"], forged["steps"], forged["assistant_message"])
+    forged["steps"][-1]["output"]["receipt"] = {**forged["steps"][-1]["output"]["receipt"], "hash": redo["hash"], "steps": redo["steps"]}
+    res = verify_run(forged)
+    assert not res["ok"] and res["signature"] == "invalid" and "signature" in res["reason"]
+
+    # without the key, a signed receipt is reported as unchecked rather than valid
+    monkeypatch.delenv("RECEIPT_SECRET")
+    assert verify_run(run)["signature"] == "unchecked"
+
+
+def test_unsigned_without_a_secret(monkeypatch):
+    monkeypatch.delenv("RECEIPT_SECRET", raising=False)
+    r, hooks = run_once()
+    assert "sig" not in r.steps[-1].output["receipt"]
+    assert verify_run(stored_run(r, hooks))["signature"] == "unsigned"

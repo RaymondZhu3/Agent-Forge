@@ -20,6 +20,7 @@ from tools.registry import registry as default_registry
 from .llm import LLM, FunctionCall, GeminiLLM, LLMError, LLMTurn
 from .receipt import chain as receipt_chain
 from .receipt import data_hash
+from .receipt import sign as sign_receipt
 from .verify import USER_SOURCE, explain_figures, mark_user_figures, verify_answer
 
 RUN_TIMEOUT_S = float(os.getenv("RUN_TIMEOUT_S", "90"))
@@ -338,6 +339,6 @@ def run_agent(
               "output": out, "success": True, "error": None}
     rc = _safe(receipt_chain, run_id, agent.id, message, [s.model_dump() for s in steps] + [record], answer)
     if rc is not None:  # a receipt must never cost the user their answer
-        out["receipt"] = rc
+        out["receipt"] = _safe(sign_receipt, rc) or rc
     add_step(type="verify", input=record["input"], output=out, ms=int((time.perf_counter() - t0) * 1000))
     return finish("completed", answer, claims=claims, blocked=blocked)

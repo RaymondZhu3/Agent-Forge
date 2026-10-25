@@ -11,9 +11,10 @@ The final verify step stores {"receipt": {"hash", "steps": [h1..hn]}}; its own r
 Change anything in a stored step, the answer, or a figure's verified/flagged label and the chain no longer
 matches. web/src/lib/receipt.ts implements the same canonical form, so the browser can check it too.
 
-What it proves: the stored record wasn't altered after the run. What it doesn't: that tool data was true
-(that's the fact-check), or that someone with database access didn't recompute the whole chain (signing the
-receipt with a server key, or publishing it elsewhere, would close that).
+What it proves: the stored record wasn't altered after the run. With RECEIPT_SECRET set on the server, each receipt
+is also signed (HMAC-SHA256 over the receipt hash, with a key that is not stored in the database), so someone who
+edits a run and recomputes the whole chain still can't produce a valid signature. What it doesn't prove: that the
+tool data was true (that's the fact-check's job).
 
     python -m server.runtime.receipt RUN_ID [--api http://144.202.28.129:8000]
 """
@@ -21,8 +22,10 @@ receipt with a server key, or publishing it elsewhere, would close that).
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
+import os
 import sys
 from decimal import Decimal
 from typing import Any
@@ -106,8 +109,38 @@ def chain(run_id: str, agent_id: str, user_message: str, steps: list[dict[str, A
     return {"version": 1, "algo": "sha256", "hash": sha256(h + "\n" + canonical({"answer": answer or ""})), "steps": links}
 
 
-def verify_run(run: dict[str, Any]) -> dict[str, Any]:
-    """Recompute a stored run's receipt (GET /api/runs/{id} JSON). Returns {ok, reason, hash, ...}."""
+def _secret() -> str | None:
+    return os.getenv("RECEIPT_SECRET") or None
+
+
+def key_id(secret: str) -> str:
+    """Public fingerprint of the signing key (safe to show), so you can tell which key signed a receipt."""
+    return hashlib.sha256(secret.encode()).hexdigest()[:8]
+
+
+def sign(receipt: dict[str, Any], secret: str | None = None) -> dict[str, Any]:
+    """Add an HMAC signature over the receipt hash when the server has a RECEIPT_SECRET."""
+    secret = secret or _secret()
+    if not secret:
+        return receipt
+    sig = hmac.new(secret.encode(), receipt["hash"].encode(), hashlib.sha256).hexdigest()
+    return {**receipt, "sig": sig, "key_id": key_id(secret)}
+
+
+def check_signature(receipt: dict[str, Any], secret: str | None = None) -> str:
+    """'valid' | 'invalid' | 'unsigned' | 'unchecked' (signed, but this machine has no key)."""
+    if not receipt.get("sig"):
+        return "unsigned"
+    secret = secret or _secret()
+    if not secret:
+        return "unchecked"
+    want = hmac.new(secret.encode(), str(receipt.get("hash", "")).encode(), hashlib.sha256).hexdigest()
+    return "valid" if hmac.compare_digest(want, str(receipt["sig"])) and receipt.get("key_id") == key_id(secret) else "invalid"
+
+
+def verify_run(run: dict[str, Any], secret: str | None = None) -> dict[str, Any]:
+    """Recompute a stored run's receipt (GET /api/runs/{id} JSON) and check its signature when a key is available.
+    Returns {ok, reason, hash, signature}."""
     steps = run.get("steps") or []
     idx = next((i for i in range(len(steps) - 1, -1, -1)
                 if isinstance(steps[i].get("output"), dict) and isinstance(steps[i]["output"].get("receipt"), dict)), None)
@@ -117,12 +150,19 @@ def verify_run(run: dict[str, Any]) -> dict[str, Any]:
     got = chain(run.get("id") or run.get("run_id") or "", run.get("agent_id") or run.get("agentId") or "",
                 run.get("user_message") or run.get("userMessage") or "", steps[: idx + 1],
                 run.get("assistant_message") if "assistant_message" in run else run.get("assistantMessage"))
+    signature = check_signature(stored, secret)
     if got["hash"] == stored.get("hash"):
-        return {"ok": True, "reason": f"The record is intact. All {idx + 1} steps and the answer match the receipt.", "hash": got["hash"]}
+        if signature == "invalid":
+            return {"ok": False, "signature": signature, "hash": got["hash"],
+                    "reason": "The chain matches, but the signature doesn't match the server's key, so the receipt itself was rewritten."}
+        note = {"valid": " The server's signature is valid.", "unchecked": " It is signed, but this check had no key to verify the signature.",
+                "unsigned": ""}[signature]
+        return {"ok": True, "signature": signature, "hash": got["hash"],
+                "reason": f"The record is intact. All {idx + 1} steps and the answer match the receipt.{note}"}
     for i, (a, b) in enumerate(zip(got["steps"], stored.get("steps") or [])):
         if a != b:
-            return {"ok": False, "reason": f"Record changed at step {steps[i].get('step', i + 1)}.", "hash": got["hash"]}
-    return {"ok": False, "reason": "The answer was changed after the run.", "hash": got["hash"]}
+            return {"ok": False, "signature": signature, "reason": f"Record changed at step {steps[i].get('step', i + 1)}.", "hash": got["hash"]}
+    return {"ok": False, "signature": signature, "reason": "The answer was changed after the run.", "hash": got["hash"]}
 
 
 def main(argv: list[str] | None = None) -> int:

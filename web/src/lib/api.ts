@@ -61,6 +61,8 @@ export const api = {
   /** Experimental: one sentence -> an agent config to review (nothing is saved). */
   draftAgent: (description: string) => request<AgentCreate>("/agents/draft", { method: "POST", body: JSON.stringify({ description }) }),
   /** The demo customer's accounts, purchases and bills, as the agent's Nessie tools see them. */
+  /** Server-side receipt check, including the signature (the browser can't hold the signing key). */
+  verifyRunOnServer: (runId: string) => request<{ ok: boolean; reason: string; signature?: "valid" | "invalid" | "unsigned" | "unchecked" }>(`/runs/${runId}/verify`),
   demoAccount: (agentId: string) => request<DemoAccount>(`/demo-account?agent_id=${encodeURIComponent(agentId)}`),
   chat: (id: string, body: ChatRequest, signal?: AbortSignal) =>
     request<ChatResponse>(`/agents/${id}/chat`, { method: "POST", body: JSON.stringify(body), signal }),

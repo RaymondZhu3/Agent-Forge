@@ -71,7 +71,7 @@ export async function sha256(s: string): Promise<string> {
   return sha256Pure(bytes);
 }
 
-type Receipt = { version: number; algo: string; hash: string; steps: string[] };
+type Receipt = { version: number; algo: string; hash: string; steps: string[]; sig?: string; key_id?: string };
 
 function stepRecord(s: RunStep) {
   let out = s.output as Record<string, unknown> | null;

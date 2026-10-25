@@ -264,6 +264,18 @@ def draft_agent_route(body: _DraftRequest, llm: Optional[LLM] = Depends(get_llm)
         raise HTTPException(502, str(e))
 
 
+@app.get("/api/runs/{run_id}/verify")
+def verify_run_route(run_id: str, s: Session = Depends(get_session)):
+    """Recompute a stored run's audit receipt and check its signature with the server's RECEIPT_SECRET."""
+    from server.runtime.receipt import verify_run
+
+    r = s.get(RunRow, run_id)
+    if r is None:
+        raise HTTPException(404, "Run not found")
+    steps = s.query(RunStepRow).filter(RunStepRow.run_id == run_id).order_by(RunStepRow.step_number).all()
+    return verify_run(_run(r, steps).model_dump(mode="json", by_alias=True))
+
+
 @app.get("/api/demo-account")
 def demo_account_route(agent_id: str, s: Session = Depends(get_session)):
     """The demo customer's accounts, purchases and bills, read with the agent's own Nessie settings."""
