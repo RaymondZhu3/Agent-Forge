@@ -5,7 +5,7 @@ import { hashStr } from "../lib/format";
 export default function AgentAvatar({ seed, size = 40 }: { seed: string; size?: number }) {
   const { cells, h1, h2, gid } = useMemo(() => {
     const h = hashStr(seed || "agent");
-    const hue = 205 + (h % 90); // blue → violet band, stays on-brand
+    const hue = 150 + (h % 70); // ledger green → navy band
     const cells: [number, number][] = [];
     let bits = h ^ (hashStr(seed + "x") << 1);
     for (let y = 0; y < 5; y++) {
@@ -24,12 +24,12 @@ export default function AgentAvatar({ seed, size = 40 }: { seed: string; size?: 
     <svg width={size} height={size} viewBox="0 0 40 40" role="img" aria-label="Agent avatar" className="avatar">
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor={`hsl(${h1} 85% 62%)`} />
-          <stop offset="1" stopColor={`hsl(${h2} 80% 58%)`} />
+          <stop offset="0" stopColor={`hsl(${h1} 45% 30%)`} />
+          <stop offset="1" stopColor={`hsl(${h2} 40% 26%)`} />
         </linearGradient>
       </defs>
-      <rect width="40" height="40" rx="8" fill="#0d1124" />
-      <rect x="0.5" y="0.5" width="39" height="39" rx="7.5" fill="none" stroke="#2a3260" />
+      <rect width="40" height="40" rx="8" fill="#f8faf6" />
+      <rect x="0.5" y="0.5" width="39" height="39" rx="7.5" fill="none" stroke="#a9b9ac" />
       {cells.map(([x, y], i) => (
         <rect key={i} x={7 + x * 5.2} y={7 + y * 5.2} width="4.4" height="4.4" rx="1" fill={`url(#${gid})`} />
       ))}

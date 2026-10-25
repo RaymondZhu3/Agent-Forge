@@ -1,8 +1,8 @@
-import { AlertTriangle, ArrowUp, ChevronDown, ExternalLink, FileSearch, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Square } from "lucide-react";
+import { AlertTriangle, ArrowUp, Check, ChevronDown, ExternalLink, FileSearch, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
-import Markdown from "../components/Markdown";
+import Markdown, { FigureMarks } from "../components/Markdown";
 import ToolIcon from "../components/ToolIcon";
 import Trace, { stepLabel } from "../components/Trace";
 import { EmptyState, ErrorBanner, ModeBadge, Skeleton, StatusPill, modeOf } from "../components/ui";
@@ -18,9 +18,9 @@ type Turn =
 
 const SUGGESTIONS: Record<string, { label: string; text: string }[]> = {
   smart_spend: [
+    { label: "Check a price someone quoted", text: "Someone told me AirPods Pro 2 are $199 on Amazon. How much would I have saved vs what I paid?" },
+    { label: "Cut my monthly bills", text: "How can I save money on my monthly bills?" },
     { label: "Find three ways to save", text: "Find three ways I could reduce my spending." },
-    { label: "Review my subscriptions", text: "Which recurring bills and subscriptions am I paying for, and could any be cheaper?" },
-    { label: "Check my recent purchases", text: "Am I overpaying for anything I bought recently? Compare prices." },
   ],
   news_monitor: [
     { label: "NVIDIA & chips", text: "Brief me on NVIDIA and semiconductor supply chains." },
@@ -59,27 +59,58 @@ function DataUsed({ steps }: { steps: RunStep[] }) {
   );
 }
 
+const TOOL_NAMES: Record<string, string> = {
+  nessie_purchases: "Nessie purchases", nessie_bills: "Nessie bills", nessie_accounts: "Nessie accounts",
+  serpapi_shopping: "Google Shopping", serpapi_web_search: "Google search", serpapi_news: "Google News", serpapi_local_places: "Google Local",
+};
+const HOW: Record<string, string> = { difference: "difference", sum: "sum", annualized: "× 12" };
+const HOW_LONG: Record<string, string> = { exact: "Exact match", difference: "Difference of two checked figures", sum: "Sum of two checked figures", annualized: "Monthly figure × 12" };
+/** The sentence a figure came from, without markdown syntax. */
+const plain = (t: string) => t.replace(/\[([^\]]+)\]\([^)]*\)?/g, "$1").replace(/[*_`#]+/g, "").replace(/\s+/g, " ").trim();
+
+/** One row per figure as written; a figure counts as backed if any mention of it is. */
+function ledger(claims: Claim[]) {
+  const rows = new Map<string, { claim: Claim; times: number; verified: boolean }>();
+  for (const c of claims) {
+    const r = rows.get(c.text);
+    if (!r) rows.set(c.text, { claim: c, times: 1, verified: c.verified });
+    else { r.times++; if (c.verified && !r.verified) { r.claim = c; r.verified = true; } }
+  }
+  return [...rows.values()];
+}
+
+export function figureMarks(claims: Claim[]) {
+  return new Map(ledger(claims).map((r) => [r.claim.text, r.verified]));
+}
+
 function FactCheck({ claims, blocked, mode }: { claims: Claim[]; blocked: boolean; mode?: string }) {
-  const [open, setOpen] = useState(false);
+  const rows = useMemo(() => ledger(claims), [claims]);
+  const bad = rows.filter((r) => !r.verified);
+  const [open, setOpen] = useState(bad.length > 0);
   if (mode === "off" && !claims.length) return null;
-  if (!claims.length) return <div className="fact muted sm"><ShieldCheck size={13} /> No figures to verify in this answer.</div>;
-  const bad = claims.filter((c) => !c.verified);
+  if (!claims.length) return <div className="fact muted sm"><ShieldCheck size={13} /> No figures in this answer to check.</div>;
+  const ordered = [...bad, ...rows.filter((r) => r.verified)];
   return (
     <div className={`fact${bad.length ? " warn" : " ok"}`}>
       <button className="fact-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        {bad.length ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
-        <strong>{claims.length - bad.length} of {claims.length} figures verified</strong>
-        <span className="muted sm">{bad.length ? `${bad.length} not backed by tool data` : "every figure traced to a tool result"}</span>
+        {bad.length ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />}
+        <strong>{bad.length ? `${bad.length} ${bad.length === 1 ? "figure isn't" : "figures aren't"} backed by tool data` : `All ${rows.length} figures match tool data`}</strong>
+        <span className="muted sm">{rows.length - bad.length} of {rows.length} checked against this run's tool results</span>
         <ChevronDown size={13} className={`chev${open ? " open" : ""}`} />
       </button>
-      {blocked && <p className="note warn"><ShieldAlert size={12} /> Unverified figures were redacted from this answer.</p>}
+      {blocked && <p className="note warn"><ShieldAlert size={12} /> Unbacked figures were removed from the answer.</p>}
       {open && (
-        <ul className="claims">
-          {[...bad, ...claims.filter((c) => c.verified)].map((c, i) => (
-            <li key={i} className={c.verified ? "v" : "u"}>
-              <span className="mono claim-t">{c.text}</span>
-              <span className="claim-c">{c.context}</span>
-              <span className="claim-s mono">{c.verified ? `${c.source_tool ?? "tool"} · step ${c.source_step}${c.how ? ` · ${c.how}` : ""}` : "unverified"}</span>
+        <ul className="tape">
+          {ordered.map(({ claim: c, times, verified }) => (
+            <li key={c.text} className={verified ? "v" : "u"}>
+              <span className="amt">{c.text}</span>
+              <span className="ctx">{plain(c.context)}</span>
+              <span className="src" title={verified ? HOW_LONG[c.how ?? "exact"] : undefined}>
+                {verified ? (
+                  <><Check size={13} aria-hidden /> {TOOL_NAMES[c.source_tool ?? ""] ?? c.source_tool ?? "Tool"}, step {c.source_step}{c.how && HOW[c.how] ? ` (${HOW[c.how]})` : ""}</>
+                ) : "No tool returned this"}
+                {times > 1 && <span className="times">×{times}</span>}
+              </span>
             </li>
           ))}
         </ul>
@@ -91,6 +122,7 @@ function FactCheck({ claims, blocked, mode }: { claims: Claim[]; blocked: boolea
 function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
   const [showTrace, setShowTrace] = useState(false);
   const sources = useMemo(() => extractUrls(res.assistant_message), [res.assistant_message]);
+  const marks = useMemo(() => figureMarks(res.claims), [res.claims]);
   const fixtureOnly = res.data_modes.length > 0 && res.data_modes.every((m) => m === "fixture");
   const failed = res.status === "failed";
 
@@ -110,7 +142,9 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
         {!failed && <DataUsed steps={res.steps} />}
         {res.assistant_message && (
           <div className="answer">
-            <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
+            <FigureMarks.Provider value={marks}>
+              <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
+            </FigureMarks.Provider>
           </div>
         )}
         {sources.length > 0 && (

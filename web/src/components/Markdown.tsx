@@ -1,5 +1,5 @@
 import { ExternalLink } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, createContext, useContext, type ReactNode } from "react";
 import { hostOf } from "../lib/format";
 
 /* Small purpose-built markdown renderer for agent answers (headings, nested lists, bold/italic/code, links).
@@ -14,6 +14,31 @@ type Item = { text: string; children: Block[] };
 
 const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/[^\s)\]]+|\*[^*\s][^*]*\*)/g;
 
+/** Fact-check result per figure as written ("$199.00" -> false). Figures in the answer are marked with it. */
+export const FigureMarks = createContext<Map<string, boolean> | null>(null);
+const FIGURE = /\$\s?\d{1,3}(?:,\d{3})+(?:\.\d+)?|\$\s?\d+(?:\.\d+)?|(?<![\w.])\d+(?:\.\d+)?\s?%/g;
+
+function Figures({ text }: { text: string }) {
+  const marks = useContext(FigureMarks);
+  if (!marks || !marks.size) return <>{text}</>;
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(FIGURE)) {
+    const ok = marks.get(m[0].trim());
+    if (ok === undefined) continue;
+    if (m.index! > last) out.push(text.slice(last, m.index));
+    out.push(
+      <span key={m.index} className={`fig ${ok ? "v" : "u"}`} title={ok ? "Matches the data a tool returned" : "No tool returned this figure"}>
+        {m[0]}
+        {!ok && <span className="sr"> (not backed by tool data)</span>}
+      </span>,
+    );
+    last = m.index! + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return <>{out}</>;
+}
+
 export function renderInline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
@@ -21,7 +46,7 @@ export function renderInline(text: string): ReactNode[] {
   let i = 0;
   const inlineRe = new RegExp(INLINE.source, "g"); // per call: recursive calls must not share lastIndex
   while ((m = inlineRe.exec(text))) {
-    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m.index > last) out.push(<Figures key={`t${i}`} text={text.slice(last, m.index)} />);
     const tok = m[0];
     const key = i++;
     if (tok.startsWith("**")) out.push(<strong key={key}>{renderInline(tok.slice(2, -2))}</strong>);
@@ -36,7 +61,7 @@ export function renderInline(text: string): ReactNode[] {
     } else out.push(<em key={key}>{tok.slice(1, -1)}</em>);
     last = m.index + tok.length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) out.push(<Figures key="tail" text={text.slice(last)} />);
   return out;
 }
 
