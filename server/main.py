@@ -239,3 +239,36 @@ def analytics_summary(agent_id: Optional[str] = None, s: Session = Depends(get_s
 @app.get("/api/analytics/tools", response_model=list[ToolAnalytics])
 def analytics_tools(agent_id: Optional[str] = None, s: Session = Depends(get_session)):
     return analytics.by_tool(s, agent_id)
+
+
+# ---------- Person 1 additions (experimental, Oct 25): agent drafting + demo account ----------
+# Logic lives in server/runtime/drafting.py; these routes only adapt it to HTTP.
+from pydantic import BaseModel as _BaseModel  # noqa: E402
+
+from server.runtime.drafting import demo_account, draft_agent  # noqa: E402
+from server.runtime.llm import LLMError  # noqa: E402
+
+
+class _DraftRequest(_BaseModel):
+    description: str
+
+
+@app.post("/api/agents/draft", response_model=AgentCreate)
+def draft_agent_route(body: _DraftRequest, llm: Optional[LLM] = Depends(get_llm)):
+    """One sentence -> a reviewed-before-deploy agent config (nothing is saved)."""
+    try:
+        return draft_agent(body.description, llm=llm)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except LLMError as e:
+        raise HTTPException(502, str(e))
+
+
+@app.get("/api/demo-account")
+def demo_account_route(agent_id: str, s: Session = Depends(get_session)):
+    """The demo customer's accounts, purchases and bills, read with the agent's own Nessie settings."""
+    config = _to_config(_get_agent(s, agent_id))
+    try:
+        return demo_account(config)
+    except ValueError as e:
+        raise HTTPException(404, str(e))

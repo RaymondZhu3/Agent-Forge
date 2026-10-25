@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useParams } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
 import Markdown, { FigureHover, FigureMarks } from "../components/Markdown";
+import DemoAccount from "../components/DemoAccount";
 import EvidenceCard from "../components/Evidence";
 import { describeFigure, figureMap, figureMapFromSteps, TOOL_NAMES, type FigureInfo } from "../lib/figures";
 import Receipt from "../components/Receipt";
@@ -365,6 +366,8 @@ export default function Chat() {
   const [pending, setPending] = useState<{ startedAt: number } | null>(null);
   const [liveSteps, setLiveSteps] = useState<RunStep[]>([]);
   const session = useRef(uid("session"));
+  const [showAcct, setShowAcct] = useState(false);
+  const closeAcct = useCallback(() => setShowAcct(false), []);
   const abort = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -435,6 +438,7 @@ export default function Chat() {
         <StatusPill status="deployed" />
         <Link to={`/builder/${a.id}`} className="btn ghost sm">Configure</Link>
         <Link to={`/dashboard?agent=${a.id}`} className="btn ghost sm">Runs</Link>
+        {a.tools.some((t) => t.name.startsWith("nessie_")) && <button className="btn ghost sm" onClick={() => setShowAcct((v) => !v)} aria-expanded={showAcct}>Demo account</button>}
         <Link to={`/compare/${a.id}`} className="btn ghost sm">Compare</Link>
         <Link to={`/stress/${a.id}`} className="btn ghost sm">Stress test</Link>
       </header>
@@ -473,6 +477,7 @@ export default function Chat() {
         <div ref={endRef} />
       </div>
 
+      {showAcct && <DemoAccount agentId={a.id} onClose={closeAcct} />}
       <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
         <textarea
           ref={taRef}

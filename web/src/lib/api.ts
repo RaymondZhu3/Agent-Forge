@@ -41,6 +41,13 @@ const qs = (params: Record<string, string | number | undefined | null>) => {
 
 export type Health = { ok: boolean; db: boolean; gemini: boolean; serpapi: "live" | "fixture"; nessie: "live" | "fixture" };
 
+export type DemoAccount = {
+  accounts: { accounts?: Record<string, unknown>[] } | null;
+  purchases: { purchase_count?: number; total_spent?: number; purchases?: { description?: string; amount?: number; merchant?: string; date?: string }[] } | null;
+  bills: { recurring_monthly_total?: number; bills?: { payee?: string; name?: string; amount?: number; recurring_day_of_month?: number }[] } | null;
+  modes: Record<string, string | null>;
+};
+
 export const api = {
   health: () => request<Health>("/health"),
   tools: () => request<ToolMetadata[]>("/tools"),
@@ -51,6 +58,10 @@ export const api = {
   updateAgent: (id: string, body: AgentUpdate) => request<AgentConfig>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteAgent: (id: string) => request<{ deleted: string; runs_deleted: number; steps_deleted: number }>(`/agents/${id}`, { method: "DELETE" }),
   deploy: (id: string) => request<AgentConfig>(`/agents/${id}/deploy`, { method: "POST" }),
+  /** Experimental: one sentence -> an agent config to review (nothing is saved). */
+  draftAgent: (description: string) => request<AgentCreate>("/agents/draft", { method: "POST", body: JSON.stringify({ description }) }),
+  /** The demo customer's accounts, purchases and bills, as the agent's Nessie tools see them. */
+  demoAccount: (agentId: string) => request<DemoAccount>(`/demo-account?agent_id=${encodeURIComponent(agentId)}`),
   chat: (id: string, body: ChatRequest, signal?: AbortSignal) =>
     request<ChatResponse>(`/agents/${id}/chat`, { method: "POST", body: JSON.stringify(body), signal }),
   runs: (p: { agent_id?: string; limit?: number }) => request<Run[]>(`/runs${qs(p)}`),

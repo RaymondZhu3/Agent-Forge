@@ -93,6 +93,29 @@ function SettingsFields({ meta, cfg, onChange }: { meta: ToolMetadata | undefine
   );
 }
 
+/* ---------- describe an agent (experimental) ---------- */
+
+function DescribeBox({ onDraft }: { onDraft: (c: AgentCreate) => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    setBusy(true); setErr(null);
+    try { onDraft(await api.draftAgent(text)); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="describe">
+      <label className="field">
+        <span>Describe your agent in one sentence <span className="pill info">Experimental</span></span>
+        <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. Finds tennis courts near UT and compares racquet prices" />
+      </label>
+      <button className="btn sm" onClick={go} disabled={busy || text.trim().length < 8}>{busy ? "Drafting…" : "Draft it"}</button>
+      {err && <p className="err-t sm">{err}</p>}
+      <p className="muted sm">Gemini fills in the name, instructions, tools and fact-check mode below. Review before you deploy.</p>
+    </div>
+  );
+}
+
 /* ---------- page ---------- */
 
 export default function Builder() {
@@ -270,6 +293,7 @@ export default function Builder() {
         {showPanel("config") && (
           <aside className="panel cfg" aria-label="Agent configuration">
             <div className="panel-title">Configuration {dirty && <span className="pill warn">Unsaved</span>}</div>
+            {!saved && <DescribeBox onDraft={(c) => { setDraft(borrowCustomer(toDraft(c))); setSelected(null); }} />}
             <Section title="Identity">
               <label className="field"><span>Name</span><input value={draft.name} onChange={(e) => update({ name: e.target.value })} maxLength={60} /></label>
               {!saved ? (

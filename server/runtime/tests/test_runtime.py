@@ -385,3 +385,24 @@ def test_quick_quote_template_demonstrates_self_correction():
     assert stages == ["draft", "corrected"]
     assert set(r.steps[-1].output["fixed"]) == {"$249.00", "$169.00", "$179.00"}
     assert "receipt" in r.steps[-1].output
+
+
+def test_draft_agent_validates_the_models_draft():
+    from server.runtime.drafting import draft_agent
+
+    llm = ScriptedLLM(LLMTurn('```json\n{"name": "Court Scout", "instructions": "1. Find courts.\\n2. Compare prices.",'
+                              ' "tools": ["serpapi_local_places", "serpapi_shopping", "made_up_tool"], "fact_check": "block"}\n```', []))
+    a = draft_agent("finds tennis courts and compares racquet prices", llm=llm)
+    assert a.name == "Court Scout" and [t.name for t in a.tools] == ["serpapi_local_places", "serpapi_shopping"]
+    assert a.guardrails.fact_check == "block" and a.tools[0].settings["location"] == "Austin, Texas"
+    import pytest
+    with pytest.raises(ValueError):
+        draft_agent("hi", llm=llm)
+
+
+def test_demo_account_reads_the_agents_bank_tools():
+    from server.runtime.drafting import demo_account
+
+    d = demo_account(agent())
+    assert d["purchases"]["purchase_count"] == 11 and d["bills"]["recurring_monthly_total"] == 121.98
+    assert d["modes"]["purchases"] == "fixture"
