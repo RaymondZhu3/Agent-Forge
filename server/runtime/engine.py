@@ -332,7 +332,7 @@ def run_agent(
         **correction,
         # The per-figure result and its evidence (the record it matched, or the two figures it came from),
         # stored with the run and covered by the receipt.
-        "figures": [[c.text, c.verified, c.source_tool, c.source_step, c.how, d]
+        "figures": [[c.text, c.verified, c.source_tool, c.source_step, c.how, d, c.context[:240]]
                     for c, d in zip(claims, _safe(explain_figures, chosen, tool_outputs) or [None] * len(claims))],
     }
     record = {"step": len(steps) + 1, "type": "verify", "tool_name": None, "input": {"mode": mode, "stage": stage},

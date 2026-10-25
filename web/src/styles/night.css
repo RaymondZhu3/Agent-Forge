@@ -195,3 +195,16 @@ h5 { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--tx-2
 .acct-what { font-weight: 500; color: var(--tx); }
 .acct-body p { margin: 0; }
 .ev-anchor.above { transform: translate(-50%, -100%); }
+
+/* ---------- replay ---------- */
+.replay-banner { display: flex; gap: 8px; align-items: center; margin: 0; padding: 8px 12px; border-radius: var(--r2); font-size: 12.5px; font-weight: 600;
+  color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); border: 1px dashed color-mix(in srgb, var(--warn) 55%, transparent); }
+.replay { width: min(600px, 100%); }
+.replay-head { display: flex; gap: 10px; align-items: flex-start; }
+.replay-head > div { flex: 1; }
+.replay-head svg { margin-top: 3px; color: var(--accent); }
+.replay-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.replay-list button { width: 100%; text-align: left; display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r2); background: var(--s0); }
+.replay-list button:hover, .replay-list button:focus-visible { border-color: var(--accent); }
+.replay-q { color: var(--tx); font-size: 13.5px; }
+.err-actions { display: flex; gap: 8px; flex-wrap: wrap; }

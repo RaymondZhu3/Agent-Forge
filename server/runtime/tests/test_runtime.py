@@ -366,6 +366,8 @@ def test_figures_store_their_evidence():
     assert paid["tool"] == "nessie_purchases" and "AirPods" in paid["item"]["description"]
     # the single purchase, not the by-merchant total that happens to equal it
     assert paid["item"].get("date") == "2026-10-02"
+    # each figure keeps its sentence, so replays can show the fact-check list
+    assert any("Amazon has $189.99" in f[6] for f in r.steps[-1].output["figures"] if f[0] == "$189.99")
     saving = figs["$59.01"][5]
     assert saving["kind"] == "difference" and {o["value"] for o in saving["operands"]} == {249.0, 189.99}
 

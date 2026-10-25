@@ -1,9 +1,10 @@
-import { AlertTriangle, ArrowUp, ChevronDown, ExternalLink, FileSearch, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Square } from "lucide-react";
+import { AlertTriangle, ArrowUp, ChevronDown, ExternalLink, History, FileSearch, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Square } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
 import Markdown, { FigureHover, FigureMarks } from "../components/Markdown";
 import DemoAccount from "../components/DemoAccount";
+import ReplayPicker, { runToResponse } from "../components/ReplayPicker";
 import EvidenceCard from "../components/Evidence";
 import { describeFigure, figureMap, figureMapFromSteps, TOOL_NAMES, type FigureInfo } from "../lib/figures";
 import Receipt from "../components/Receipt";
@@ -11,13 +12,13 @@ import ToolIcon from "../components/ToolIcon";
 import Trace, { stepLabel } from "../components/Trace";
 import { EmptyState, ErrorBanner, ModeBadge, Skeleton, StatusPill, modeOf } from "../components/ui";
 import { api } from "../lib/api";
-import { extractUrls, fmtInt, fmtMs, hostOf, templateLabel, uid } from "../lib/format";
+import { extractUrls, fmtDateTime, fmtInt, fmtMs, hostOf, templateLabel, uid } from "../lib/format";
 import { useAsync, useDocumentTitle } from "../lib/hooks";
-import type { AgentConfig, ChatResponse, Claim, RunStep } from "../types";
+import type { AgentConfig, ChatResponse, Claim, Run, RunStep } from "../types";
 
 type Turn =
   | { kind: "user"; id: string; text: string }
-  | { kind: "agent"; id: string; res: ChatResponse; question?: string }
+  | { kind: "agent"; id: string; res: ChatResponse; question?: string; replayAt?: string }
   | { kind: "error"; id: string; message: string; retryText: string };
 
 export const SUGGESTIONS: Record<string, { label: string; text: string }[]> = {
@@ -199,7 +200,7 @@ export function SelfCorrection({ res }: { res: ChatResponse }) {
   );
 }
 
-function AgentTurn({ res, agent, question }: { res: ChatResponse; agent: AgentConfig; question?: string }) {
+function AgentTurn({ res, agent, question, replayAt }: { res: ChatResponse; agent: AgentConfig; question?: string; replayAt?: string }) {
   const [showTrace, setShowTrace] = useState(false);
   const sources = useMemo(() => extractUrls(res.assistant_message), [res.assistant_message]);
   const answerMarks = useMemo(() => figureMapFromSteps(res.steps) ?? figureMap(res.claims), [res.steps, res.claims]);
@@ -250,6 +251,9 @@ function AgentTurn({ res, agent, question }: { res: ChatResponse; agent: AgentCo
           {res.usage.input_tokens !== null && <span className="mono dim">{fmtInt((res.usage.input_tokens ?? 0) + (res.usage.output_tokens ?? 0))} tokens</span>}
           {res.data_modes.map((m) => <ModeBadge key={m} mode={m} />)}
         </div>
+        {replayAt && (
+          <p className="replay-banner"><History size={13} /> Replay of a recorded run from {fmtDateTime(replayAt)}. This is not a live answer.</p>
+        )}
         {fixtureOnly && <p className="note warn"><AlertTriangle size={12} /> This answer used demo data, not live API results.</p>}
         {failed && <ErrorBanner title="The agent couldn't finish" message={res.error ?? "Unknown error"} />}
         {!failed && <DataUsed steps={res.steps} lit={litStep} />}
@@ -371,6 +375,13 @@ export default function Chat() {
   const [liveSteps, setLiveSteps] = useState<RunStep[]>([]);
   const session = useRef(uid("session"));
   const [showAcct, setShowAcct] = useState(false);
+  const [showReplay, setShowReplay] = useState(false);
+  const closeReplay = useCallback(() => setShowReplay(false), []);
+  const replay = useCallback((run: Run) => {
+    setShowReplay(false);
+    setTurns((t) => [...t, { kind: "user", id: uid("u"), text: run.user_message },
+      { kind: "agent", id: uid("r") + run.id, res: runToResponse(run), question: run.user_message, replayAt: run.started_at }]);
+  }, []);
   const closeAcct = useCallback(() => setShowAcct(false), []);
   const abort = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -443,6 +454,7 @@ export default function Chat() {
         <Link to={`/builder/${a.id}`} className="btn ghost sm">Configure</Link>
         <Link to={`/dashboard?agent=${a.id}`} className="btn ghost sm">Runs</Link>
         {a.tools.some((t) => t.name.startsWith("nessie_")) && <button className="btn ghost sm" onClick={() => setShowAcct((v) => !v)} aria-expanded={showAcct}>Demo account</button>}
+        <button className="btn ghost sm" onClick={() => setShowReplay(true)} title="Re-show a recorded run if the model is down or slow">Replay</button>
         <Link to={`/compare/${a.id}`} className="btn ghost sm">Compare</Link>
         <Link to={`/stress/${a.id}`} className="btn ghost sm">Stress test</Link>
       </header>
@@ -469,11 +481,14 @@ export default function Chat() {
           t.kind === "user" ? (
             <div key={t.id} className="turn user"><div className="bubble">{t.text}</div></div>
           ) : t.kind === "agent" ? (
-            <AgentTurn key={t.id} res={t.res} agent={a} question={t.question} />
+            <AgentTurn key={t.id} res={t.res} agent={a} question={t.question} replayAt={t.replayAt} />
           ) : (
             <div key={t.id} className="turn error-turn">
               <ErrorBanner title="Message failed" message={t.message} />
-              <button className="btn ghost sm" onClick={() => send(t.retryText)} disabled={!!pending}><RotateCcw size={13} /> Try again</button>
+              <div className="err-actions">
+                <button className="btn ghost sm" onClick={() => send(t.retryText)} disabled={!!pending}><RotateCcw size={13} /> Try again</button>
+                <button className="btn ghost sm" onClick={() => setShowReplay(true)}><History size={13} /> Replay a recorded run</button>
+              </div>
             </div>
           ),
         )}
@@ -482,6 +497,7 @@ export default function Chat() {
       </div>
 
       {showAcct && <DemoAccount agentId={a.id} onClose={closeAcct} />}
+      {showReplay && <ReplayPicker agentId={a.id} onPick={replay} onClose={closeReplay} />}
       <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
         <textarea
           ref={taRef}

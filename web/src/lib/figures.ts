@@ -50,3 +50,15 @@ export function figureMapFromSteps(steps: StepLike[] | null | undefined): Map<st
 }
 
 export const money = (v: number) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
+
+/** Rebuild a chat response from a stored run, for replaying it (figures carry the per-claim results). */
+export function claimsFromSteps(steps: StepLike[] | null | undefined) {
+  for (let i = (steps?.length ?? 0) - 1; i >= 0; i--) {
+    const figs = (steps![i].output as { figures?: unknown[][] } | null)?.figures;
+    if (!Array.isArray(figs)) continue;
+    return (figs as [string, boolean, string | null, number | null, string | null, unknown, string?][]).map(
+      ([text, verified, source_tool, source_step, how, , context]) => ({ text, verified, source_tool, source_step, how, context: context ?? "" }),
+    );
+  }
+  return [];
+}
