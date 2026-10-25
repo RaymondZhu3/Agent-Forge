@@ -19,7 +19,7 @@ type Turn =
   | { kind: "agent"; id: string; res: ChatResponse; question?: string }
   | { kind: "error"; id: string; message: string; retryText: string };
 
-const SUGGESTIONS: Record<string, { label: string; text: string }[]> = {
+export const SUGGESTIONS: Record<string, { label: string; text: string }[]> = {
   smart_spend: [
     { label: "Find three ways to save", text: "Find three ways I could reduce my spending." },
     { label: "Review my subscriptions", text: "Which recurring bills and subscriptions am I paying for, and could any be cheaper?" },
@@ -101,7 +101,7 @@ function useCountUp(to: number, ms: number) {
 
 const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function FactCheck({ claims, blocked, mode, countMs = 0 }: { claims: Claim[]; blocked: boolean; mode?: string; countMs?: number }) {
+export function FactCheck({ claims, blocked, mode, countMs = 0 }: { claims: Claim[]; blocked: boolean; mode?: string; countMs?: number }) {
   const rows = useMemo(() => ledger(claims), [claims]);
   const bad = rows.filter((r) => !r.verified);
   const [open, setOpen] = useState(bad.length > 0);
@@ -142,7 +142,7 @@ function FactCheck({ claims, blocked, mode, countMs = 0 }: { claims: Claim[]; bl
 type VerifyOut = { draft?: string; invented?: string[]; fixed?: string[]; used_correction?: boolean };
 
 /** Shown only when the platform sent made-up figures back to the agent (verify steps: stage draft -> corrected). */
-function SelfCorrection({ res }: { res: ChatResponse }) {
+export function SelfCorrection({ res }: { res: ChatResponse }) {
   const [open, setOpen] = useState(false);
   const verifies = res.steps.filter((s) => s.type === "verify");
   const draftStep = verifies.find((s) => (s.output as VerifyOut | null)?.draft);
@@ -435,6 +435,7 @@ export default function Chat() {
         <StatusPill status="deployed" />
         <Link to={`/builder/${a.id}`} className="btn ghost sm">Configure</Link>
         <Link to={`/dashboard?agent=${a.id}`} className="btn ghost sm">Runs</Link>
+        <Link to={`/compare/${a.id}`} className="btn ghost sm">Compare</Link>
         <Link to={`/stress/${a.id}`} className="btn ghost sm">Stress test</Link>
       </header>
 
