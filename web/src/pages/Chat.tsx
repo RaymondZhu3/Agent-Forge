@@ -435,6 +435,7 @@ export default function Chat() {
         <StatusPill status="deployed" />
         <Link to={`/builder/${a.id}`} className="btn ghost sm">Configure</Link>
         <Link to={`/dashboard?agent=${a.id}`} className="btn ghost sm">Runs</Link>
+        <Link to={`/stress/${a.id}`} className="btn ghost sm">Stress test</Link>
       </header>
 
       <div className="thread" role="log" aria-label="Conversation">

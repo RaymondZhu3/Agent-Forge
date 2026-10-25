@@ -5,6 +5,7 @@ import Chat from "./pages/Chat";
 import Dashboard from "./pages/Dashboard";
 import Gallery from "./pages/Gallery";
 import RunDetail from "./pages/RunDetail";
+import StressTest from "./pages/StressTest";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="chat/:id" element={<Chat />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="runs/:id" element={<RunDetail />} />
+        <Route path="stress/:id" element={<StressTest />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
