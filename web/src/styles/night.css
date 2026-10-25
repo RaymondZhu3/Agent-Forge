@@ -85,3 +85,13 @@ h5 { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--tx-2
   padding: 5px 9px; border-radius: 6px; background: #0a1020; border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent); color: var(--tx); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
 .fig-tip.u { border-color: color-mix(in srgb, var(--err) 60%, transparent); color: #ffc2c7; }
 @media (prefers-reduced-motion: reduce) { .du-card, .fig.live { transition: none; } .du-card.lit { transform: none; } }
+
+/* ---------- fact-check stamping (once per new answer) ---------- */
+.fig { display: inline-block; line-height: 1.35; }
+.answer.stamping .fig { animation: fig-stamp 440ms cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes fig-stamp {
+  0% { opacity: 0.15; transform: scale(0.8); filter: grayscale(1); }
+  60% { opacity: 1; transform: scale(1.14); filter: none; }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@media (prefers-reduced-motion: reduce) { .answer.stamping .fig { animation: none; } }

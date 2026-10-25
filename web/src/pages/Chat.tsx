@@ -76,17 +76,39 @@ function ledger(claims: Claim[]) {
   return [...rows.values()];
 }
 
-function FactCheck({ claims, blocked, mode }: { claims: Claim[]; blocked: boolean; mode?: string }) {
+/** Counts up to `to` over `ms` (once, on mount); returns `to` right away when ms is 0. */
+function useCountUp(to: number, ms: number) {
+  const [n, setN] = useState(ms > 0 ? 0 : to);
+  useEffect(() => {
+    if (ms <= 0) { setN(to); return; }
+    const start = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / ms);
+      setN(Math.round(to * k));
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [to, ms]);
+  return n;
+}
+
+const reducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function FactCheck({ claims, blocked, mode, countMs = 0 }: { claims: Claim[]; blocked: boolean; mode?: string; countMs?: number }) {
   const rows = useMemo(() => ledger(claims), [claims]);
   const bad = rows.filter((r) => !r.verified);
   const [open, setOpen] = useState(bad.length > 0);
+  const okCount = rows.length - bad.length;
+  const shown = useCountUp(okCount, countMs);
   if (mode === "off" && !claims.length) return null;
   if (!claims.length) return <div className="fact muted sm"><ShieldCheck size={13} /> No figures to verify in this answer.</div>;
   return (
     <div className={`fact${bad.length ? " warn" : " ok"}`}>
       <button className="fact-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         {bad.length ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
-        <strong>{rows.length - bad.length} of {rows.length} figures verified</strong>
+        <strong>{shown} of {rows.length} figures verified</strong>
         <span className="muted sm">{bad.length ? `${bad.length} not backed by tool data` : "every figure traced to a tool result"}</span>
         <ChevronDown size={13} className={`chev${open ? " open" : ""}`} />
       </button>
@@ -180,6 +202,19 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
   const [focus, setFocus] = useState<{ f: FigureInfo; el: HTMLElement } | null>(null);
   const onFigure = useCallback((f: FigureInfo | null, el: HTMLElement | null) => setFocus(f && el ? { f, el } : null), []);
   const litStep = focus?.f.ok ? focus.f.step ?? null : null;
+  // One orchestrated moment per new answer: figures are stamped in reading order while the counter ticks up.
+  const answerRef = useRef<HTMLDivElement>(null);
+  const [stampMs] = useState(() => (reducedMotion() ? 0 : Math.min(1500, 250 + 90 * res.claims.length)));
+  useLayoutEffect(() => {
+    const root = answerRef.current;
+    if (!root || stampMs <= 0) return;
+    const chips = Array.from(root.querySelectorAll<HTMLElement>(".fig"));
+    const step = chips.length ? Math.min(90, (stampMs - 250) / chips.length) : 0;
+    chips.forEach((c, i) => c.style.setProperty("--d", `${Math.round(i * step)}ms`));
+    root.classList.add("stamping");
+    const t = setTimeout(() => root.classList.remove("stamping"), stampMs + 500);
+    return () => clearTimeout(t);
+  }, [stampMs]);
   const fixtureOnly = res.data_modes.length > 0 && res.data_modes.every((m) => m === "fixture");
   const failed = res.status === "failed";
 
@@ -199,7 +234,7 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
         {!failed && <DataUsed steps={res.steps} lit={litStep} />}
         {!failed && <SelfCorrection res={res} />}
         {res.assistant_message && (
-          <div className="answer">
+          <div className="answer" ref={answerRef}>
             <FigureMarks.Provider value={answerMarks}>
               <FigureHover.Provider value={onFigure}>
                 <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
@@ -215,7 +250,7 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
             </div>
           </div>
         )}
-        {!failed && <FactCheck claims={res.claims} blocked={res.blocked} mode={agent.guardrails.fact_check} />}
+        {!failed && <FactCheck claims={res.claims} blocked={res.blocked} mode={agent.guardrails.fact_check} countMs={stampMs} />}
         {!failed && <Receipt runId={res.run_id} steps={res.steps} />}
         <div className="turn-foot">
           <button className="link-btn" onClick={() => setShowTrace(!showTrace)} aria-expanded={showTrace}>
