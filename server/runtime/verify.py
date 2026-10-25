@@ -175,6 +175,36 @@ def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tupl
     return found
 
 
+USER_SOURCE = "user_message"
+
+
+def mark_user_figures(claims: list[Claim], message: str) -> None:
+    """Unverified figures the user typed themselves stay unverified, but are labeled as the user's (source_tool =
+    "user_message"), so the platform doesn't try to "correct" the user and the UI can say where they came from."""
+    user = [float(m.group(1).replace(",", "")) for r in (MONEY_RE, PCT_RE) for m in r.finditer(message or "")]
+    if not user:
+        return
+
+    def val(c: Claim) -> float | None:
+        try:
+            return float(re.sub(r"[^\d.]", "", c.text.replace(",", "")))
+        except ValueError:
+            return None
+
+    # Figures derived from the user's number count as the user's too: "$249 paid - the $199 you mentioned = $50".
+    checked = [x for c in claims if c.verified and (x := val(c)) is not None]
+    values = list(user)
+    for u in user:
+        for a in checked:
+            values += [abs(a - u), a + u, abs(a - u) * 12]
+    for c in claims:
+        if c.verified:
+            continue
+        v = val(c)
+        if v is not None and any(abs(v - u) <= TOL * 12 for u in values):
+            c.source_tool = USER_SOURCE
+
+
 def verify_answer(answer: str, tool_outputs: Iterable[tuple[int, str, Any]], mode: str) -> tuple[str, list[Claim], bool]:
     """tool_outputs: (step, tool_name, data). Returns (answer, claims, blocked)."""
     if mode == "off":

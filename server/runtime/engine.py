@@ -18,9 +18,24 @@ from tools.base import Tool, ToolRegistry, ToolResult
 from tools.registry import registry as default_registry
 
 from .llm import LLM, FunctionCall, GeminiLLM, LLMError, LLMTurn
-from .verify import verify_answer
+from .verify import USER_SOURCE, mark_user_figures, verify_answer
 
 RUN_TIMEOUT_S = float(os.getenv("RUN_TIMEOUT_S", "90"))
+# Self-correction: when the model states figures no tool returned, send them back once to be sourced or removed.
+# One extra model call, only when something was made up. FACT_CHECK_REPAIR=0 turns it off.
+REPAIR_ENABLED = os.getenv("FACT_CHECK_REPAIR", "1") != "0"
+REPAIR_MIN_S = 25.0  # don't start a correction this close to the run timeout
+
+
+def repair_request(invented) -> str:
+    lines = "\n".join(f'- {c.text} in "{c.context[:160]}"' for c in invented)
+    return (
+        "Fact-check before your answer is shown: these figures don't appear in any tool result from this conversation:\n"
+        f"{lines}\n\n"
+        "Rewrite your complete answer. For each figure: if one of your tools can provide it, call the tool and use the "
+        "exact value it returns; otherwise remove the figure or say you couldn't verify it. Don't introduce figures no "
+        "tool returned. Keep figures the user gave you, attributed to them. Reply with the full corrected answer only."
+    )
 
 
 class RunHooks(Protocol):
@@ -167,92 +182,144 @@ def run_agent(
     history: list[dict[str, Any]] = [{"role": "user", "text": message}]
     max_calls = max(0, agent.guardrails.max_tool_calls)
     tool_calls = 0
-    final_text = ""
 
-    for _turn in range(max_calls + 3):
-        if time.perf_counter() - started > RUN_TIMEOUT_S:
-            return finish("failed", "", error="The agent took too long and was stopped.")
+    def agent_loop() -> tuple[LLMTurn | None, str | None]:
+        """Model/tool loop until a final answer. Returns (final turn, None) or (None, user-safe error)."""
+        nonlocal tool_calls, in_tokens, out_tokens, tokens_known
+        for _turn in range(max_calls + 3):
+            if time.perf_counter() - started > RUN_TIMEOUT_S:
+                return None, "The agent took too long and was stopped."
 
-        offer = tools if tool_calls < max_calls else []  # at the limit, force a final answer
-        t0 = time.perf_counter()
-        try:
-            turn: LLMTurn = model_client.generate(agent.model, system, history, offer)
-        except LLMError as e:
-            add_step(type="llm", input={"tools_offered": len(offer)}, ms=int((time.perf_counter() - t0) * 1000),
-                     success=False, error=str(e)[:300])
-            return finish("failed", "", error="The AI model request failed. Please try again.")
-        if turn.input_tokens is not None or turn.output_tokens is not None:
-            tokens_known = True
-            in_tokens += turn.input_tokens or 0
-            out_tokens += turn.output_tokens or 0
-        add_step(
-            type="llm",
-            input={"tools_offered": len(offer), "history_items": len(history)},
-            output={
-                **({"function_calls": [c.name for c in turn.calls]} if turn.calls else {"final_answer_chars": len(turn.text)}),
-                **({"model": turn.model} if turn.model else {}),
-                **({"retries": turn.attempts} if turn.attempts else {}),
-            },
-            ms=int((time.perf_counter() - t0) * 1000),
-            tokens=((turn.input_tokens or 0) + (turn.output_tokens or 0)) if turn.input_tokens is not None else None,
-            input_tokens=turn.input_tokens,
-            output_tokens=turn.output_tokens,
-        )
-
-        if not turn.calls:
-            final_text = turn.text.strip()
-            break
-
-        history.append({"role": "model", "turn": turn})
-        results: list[tuple[FunctionCall, dict[str, Any]]] = []
-        for call in turn.calls:
-            if call.name not in enabled:
-                err = f"Tool '{call.name}' is not enabled for this agent."
-                add_step(type="tool", tool_name=call.name, input=call.args, output={"summary": "rejected"},
-                         ms=0, success=False, error=err)
-                results.append((call, {"ok": False, "error": err}))
-                continue
-            if tool_calls >= max_calls:
-                err = "Tool-call limit reached. Answer with the data you already have."
-                add_step(type="tool", tool_name=call.name, input=call.args, output={"summary": "skipped: limit"},
-                         ms=0, success=False, error=err)
-                results.append((call, {"ok": False, "error": err}))
-                continue
-            tool, settings = enabled[call.name]
-            res: ToolResult = tool.run(call.args or {}, settings)
-            tool_calls += 1
-            s = add_step(
-                type="tool",
-                tool_name=call.name,
-                input=call.args,
-                output={"summary": tool.summarize(res), "mode": res.mode if res.ok else None, "preview": _preview(res.data)},
-                ms=res.duration_ms,
-                success=res.ok,
-                cached=res.cached,
-                fixture=res.fixture,
-                error=res.error,
+            offer = tools if tool_calls < max_calls else []  # at the limit, force a final answer
+            t0 = time.perf_counter()
+            try:
+                turn: LLMTurn = model_client.generate(agent.model, system, history, offer)
+            except LLMError as e:
+                add_step(type="llm", input={"tools_offered": len(offer)}, ms=int((time.perf_counter() - t0) * 1000),
+                         success=False, error=str(e)[:300])
+                return None, "The AI model request failed. Please try again."
+            if turn.input_tokens is not None or turn.output_tokens is not None:
+                tokens_known = True
+                in_tokens += turn.input_tokens or 0
+                out_tokens += turn.output_tokens or 0
+            add_step(
+                type="llm",
+                input={"tools_offered": len(offer), "history_items": len(history)},
+                output={
+                    **({"function_calls": [c.name for c in turn.calls]} if turn.calls else {"final_answer_chars": len(turn.text)}),
+                    **({"model": turn.model} if turn.model else {}),
+                    **({"retries": turn.attempts} if turn.attempts else {}),
+                },
+                ms=int((time.perf_counter() - t0) * 1000),
+                tokens=((turn.input_tokens or 0) + (turn.output_tokens or 0)) if turn.input_tokens is not None else None,
+                input_tokens=turn.input_tokens,
+                output_tokens=turn.output_tokens,
             )
-            if res.ok:
-                modes.add(res.mode)
-                tool_outputs.append((s.step, call.name, res.data))
-                results.append((call, {"ok": True, "data_mode": res.mode, "real_data": not res.fixture, "data": res.data}))
-            else:
-                results.append((call, {"ok": False, "error": res.error}))
-        history.append({"role": "tool", "results": results})
-    else:
-        return finish("failed", "", error="The agent didn't reach an answer within its limits.")
 
+            if not turn.calls:
+                return turn, None
+
+            history.append({"role": "model", "turn": turn})
+            results: list[tuple[FunctionCall, dict[str, Any]]] = []
+            for call in turn.calls:
+                if call.name not in enabled:
+                    err = f"Tool '{call.name}' is not enabled for this agent."
+                    add_step(type="tool", tool_name=call.name, input=call.args, output={"summary": "rejected"},
+                             ms=0, success=False, error=err)
+                    results.append((call, {"ok": False, "error": err}))
+                    continue
+                if tool_calls >= max_calls:
+                    err = "Tool-call limit reached. Answer with the data you already have."
+                    add_step(type="tool", tool_name=call.name, input=call.args, output={"summary": "skipped: limit"},
+                             ms=0, success=False, error=err)
+                    results.append((call, {"ok": False, "error": err}))
+                    continue
+                tool, settings = enabled[call.name]
+                res: ToolResult = tool.run(call.args or {}, settings)
+                tool_calls += 1
+                s = add_step(
+                    type="tool",
+                    tool_name=call.name,
+                    input=call.args,
+                    output={"summary": tool.summarize(res), "mode": res.mode if res.ok else None, "preview": _preview(res.data)},
+                    ms=res.duration_ms,
+                    success=res.ok,
+                    cached=res.cached,
+                    fixture=res.fixture,
+                    error=res.error,
+                )
+                if res.ok:
+                    modes.add(res.mode)
+                    tool_outputs.append((s.step, call.name, res.data))
+                    results.append((call, {"ok": True, "data_mode": res.mode, "real_data": not res.fixture, "data": res.data}))
+                else:
+                    results.append((call, {"ok": False, "error": res.error}))
+            history.append({"role": "tool", "results": results})
+        return None, "The agent didn't reach an answer within its limits."
+
+    final_turn, err = agent_loop()
+    if err:
+        return finish("failed", "", error=err)
+    final_text = final_turn.text.strip() if final_turn else ""
     if not final_text:
         return finish("failed", "", error="The model returned an empty answer.")
 
+    mode = agent.guardrails.fact_check
+    if mode == "off":
+        return finish("completed", final_text)
+
+    def check(text: str):
+        _, cl, _ = verify_answer(text, tool_outputs, "flag")
+        mark_user_figures(cl, message)
+        return cl, [c for c in cl if not c.verified and c.source_tool != USER_SOURCE]
+
+    # 1) Check the draft. 2) If the model stated figures no tool returned, send them back once to be sourced or
+    # removed (self-correction), and keep the corrected answer if it is no worse. 3) Apply flag/block to the result.
     t0 = time.perf_counter()
-    answer, claims, blocked = verify_answer(final_text, tool_outputs, agent.guardrails.fact_check)
-    if agent.guardrails.fact_check != "off":
-        unverified = [c.text for c in claims if not c.verified]
-        add_step(
-            type="verify",
-            input={"mode": agent.guardrails.fact_check},
-            output={"claims": len(claims), "verified": len(claims) - len(unverified), "unverified": unverified, "blocked": blocked},
-            ms=int((time.perf_counter() - t0) * 1000),
-        )
+    claims, invented = check(final_text)
+    attempt = bool(invented) and REPAIR_ENABLED and time.perf_counter() - started < RUN_TIMEOUT_S - REPAIR_MIN_S
+    add_step(
+        type="verify",
+        input={"mode": mode, "stage": "draft" if attempt else "final"},
+        output={
+            "claims": len(claims), "verified": sum(c.verified for c in claims),
+            "unverified": [c.text for c in claims if not c.verified], "blocked": False,
+            "invented": [c.text for c in invented], "user_supplied": [c.text for c in claims if c.source_tool == USER_SOURCE],
+            **({"draft": final_text, "correcting": True} if attempt else {}),
+        },
+        ms=int((time.perf_counter() - t0) * 1000),
+    )
+    chosen = final_text
+    if attempt:
+        history.append({"role": "model", "turn": final_turn})
+        history.append({"role": "user", "text": repair_request(invented)})
+        try:
+            fixed_turn, _ = agent_loop()
+        except Exception:  # a failed correction must never cost the user the answer they already have
+            fixed_turn = None
+        fixed_text = fixed_turn.text.strip() if fixed_turn else ""
+        if fixed_text:
+            t0 = time.perf_counter()
+            claims2, invented2 = check(fixed_text)
+            kept = len(invented2) <= len(invented)
+            if kept:
+                chosen = fixed_text
+            before = {c.text for c in invented}
+            add_step(
+                type="verify",
+                input={"mode": mode, "stage": "corrected"},
+                output={
+                    "claims": len(claims2), "verified": sum(c.verified for c in claims2),
+                    "unverified": [c.text for c in claims2 if not c.verified], "blocked": False,
+                    "invented": [c.text for c in invented2],
+                    "fixed": sorted(before - {c.text for c in invented2}),
+                    "used_correction": kept,
+                },
+                ms=int((time.perf_counter() - t0) * 1000),
+            )
+
+    answer, claims, blocked = verify_answer(chosen, tool_outputs, mode)
+    mark_user_figures(claims, message)
+    if blocked and steps and steps[-1].type == "verify" and isinstance(steps[-1].output, dict):
+        steps[-1].output["blocked"] = True
     return finish("completed", answer, claims=claims, blocked=blocked)

@@ -95,6 +95,16 @@ def main() -> int:
         extra = json.dumps(s.output, default=str)[:140] if s.output else ""
         flag = "" if s.success else f"  ERROR: {s.error}"
         print(f"  {s.step:>2}. [{s.type:6}] {label:22} {s.ms:>6} ms  {extra}{flag}")
+    drafts = [s for s in resp.steps if s.type == "verify" and isinstance(s.output, dict) and s.output.get("draft")]
+    fixes = [s for s in resp.steps if s.type == "verify" and isinstance(s.input, dict) and s.input.get("stage") == "corrected"]
+    if drafts:
+        print(f"\n-- Draft (before self-correction; not shown to the user) --\n{_console_text(drafts[0].output['draft'])}")
+        if fixes:
+            o = fixes[0].output
+            print(f"\n-- Self-correction: fixed {', '.join(o['fixed']) or 'nothing'}"
+                  f"{'' if o['used_correction'] else ' (correction was worse; kept the draft)'} --")
+        else:
+            print("\n-- Self-correction failed; kept the draft --")
     print(f"\n{_console_text(resp.assistant_message or resp.error or '')}\n")
     if resp.claims:
         ok = sum(c.verified for c in resp.claims)
@@ -105,7 +115,9 @@ def main() -> int:
                 continue
             shown.add((c.text, c.verified))
             mark = "ok" if c.verified else " X"
-            src = f"step {c.source_step} {c.source_tool} ({c.how})" if c.verified else "no matching tool data"
+            src = (f"step {c.source_step} {c.source_tool} ({c.how})" if c.verified
+                   else "from the user's message; no tool confirms it" if c.source_tool == "user_message"
+                   else "no matching tool data")
             print(f"  {mark} {c.text:>12}  {src}")
     if resp.usage.input_tokens is not None:
         print(f"Tokens: {resp.usage.input_tokens} in / {resp.usage.output_tokens} out")

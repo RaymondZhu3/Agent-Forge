@@ -268,3 +268,81 @@ def test_claim_context_does_not_stop_at_a_domain_dot():
     outputs = [(3, "serpapi_shopping", {"lowest_price": 189.99})]
     _, claims, _ = verify_answer("Lowest price found: $189.99 at Amazon.com today. Next sentence.", outputs, "flag")
     assert claims[0].context == "Lowest price found: $189.99 at Amazon.com today."
+
+
+def test_self_correction_replaces_invented_figure_with_sourced_one():
+    """The model invents a price; the platform sends it back once; the corrected answer is verified."""
+    llm = ScriptedLLM(
+        LLMTurn("", [call("serpapi_shopping", query="AirPods Pro 2")]),
+        LLMTurn("Lowest price is $189.99. Black Friday will be $149.00.", []),
+        LLMTurn("Lowest price is $189.99 at Amazon. I couldn't verify a Black Friday price.", []),
+    )
+    r = run_agent(agent(), "price?", llm=llm)
+    assert r.status == "completed" and "$149.00" not in r.assistant_message
+    assert all(c.verified for c in r.claims)
+    verifies = [s for s in r.steps if s.type == "verify"]
+    assert [s.input["stage"] for s in verifies] == ["draft", "corrected"]
+    assert verifies[0].output["invented"] == ["$149.00"] and "$149.00" in verifies[0].output["draft"]
+    assert verifies[1].output["fixed"] == ["$149.00"] and verifies[1].output["used_correction"]
+    assert "$149.00" in llm.histories[-1][-1]["text"]  # the correction request named the figure
+
+
+def test_user_figures_are_labeled_and_do_not_trigger_correction():
+    llm = ScriptedLLM(
+        LLMTurn("", [call("nessie_purchases")]),
+        LLMTurn("You paid $249.00. At the $199 you mentioned you'd save $50.00.", []),
+    )
+    r = run_agent(agent(), "Someone said $199 on Amazon. Savings?", llm=llm)
+    by = {c.text: c for c in r.claims}
+    assert by["$199"].source_tool == "user_message" and not by["$199"].verified
+    # derived from the user's figure ($249 - $199): the user's too, so no correction is attempted
+    assert by["$50.00"].source_tool == "user_message" and not by["$50.00"].verified
+    assert len(llm.histories) == 2 and "$50.00" in r.assistant_message
+
+
+def test_only_user_figures_unverified_means_no_correction_call():
+    llm = ScriptedLLM(
+        LLMTurn("", [call("nessie_purchases")]),
+        LLMTurn("You paid $249.00; the $199 you mentioned isn't confirmed by my tools.", []),
+    )
+    r = run_agent(agent(), "Someone said $199. True?", llm=llm)
+    assert len(llm.histories) == 2
+    assert [s.input["stage"] for s in r.steps if s.type == "verify"] == ["final"]
+
+
+def test_failed_or_worse_correction_keeps_the_draft():
+    from server.runtime.llm import LLMError
+
+    class FailingSecond(ScriptedLLM):
+        def generate(self, model, system, history, tools):
+            if len(self.histories) == 2:
+                self.histories.append(list(history))
+                raise LLMError("overloaded")
+            return super().generate(model, system, history, tools)
+
+    llm = FailingSecond(
+        LLMTurn("", [call("serpapi_shopping", query="AirPods Pro 2")]),
+        LLMTurn("Lowest price is $189.99; soon $149.00.", []),
+    )
+    r = run_agent(agent(), "price?", llm=llm)
+    assert r.status == "completed" and "$149.00" in r.assistant_message
+
+    worse = ScriptedLLM(
+        LLMTurn("", [call("serpapi_shopping", query="AirPods Pro 2")]),
+        LLMTurn("Lowest price is $189.99; soon $149.00.", []),
+        LLMTurn("Maybe $149.00, $139.00 or $129.00.", []),
+    )
+    r = run_agent(agent(), "price?", llm=worse)
+    assert "$189.99" in r.assistant_message
+    assert [s.output.get("used_correction") for s in r.steps if s.type == "verify"][-1] is False
+
+
+def test_block_mode_still_redacts_what_correction_left():
+    llm = ScriptedLLM(
+        LLMTurn("", [call("serpapi_shopping", query="AirPods Pro 2")]),
+        LLMTurn("Lowest price is $189.99; soon $149.00.", []),
+        LLMTurn("Lowest price is $189.99; maybe $149.00 later.", []),
+    )
+    r = run_agent(agent(fact_check="block"), "price?", llm=llm)
+    assert r.blocked and "$149.00" not in r.assistant_message and "[unverified figure removed]" in r.assistant_message
+    assert [s for s in r.steps if s.type == "verify"][-1].output["blocked"] is True
