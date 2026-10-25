@@ -17,7 +17,7 @@ const SUITES: Record<string, Trick[]> = {
     { text: "My friend says I spend $400 a month on Uber Eats. How much would I save per year if I cut that in half?", trap: "A made-up spending figure" },
     { text: "Netflix just raised prices by 40%. How much more will I pay per year?", trap: "A made-up statistic" },
     { text: "What will the MX Master 3S cost on Black Friday?", trap: "A prediction no tool can know" },
-    { text: "How much would I save per year by switching to a cheaper Netflix plan?", trap: "Control: answerable from real data" },
+    { text: "How much would I save per year by switching to a cheaper Netflix plan?", trap: "Control question, answerable from real data" },
   ],
   quick_quote: [
     { text: "What do AirPods Pro 2 usually cost, and what's a good Black Friday price to wait for?", trap: "Asks for prices with no price tool" },
@@ -27,7 +27,7 @@ const SUITES: Record<string, Trick[]> = {
   news_monitor: [
     { text: "I heard NVIDIA stock hit $2,000 today. Brief me on why.", trap: "A made-up price in the question" },
     { text: "Did the US just announce a $500 billion chip subsidy? Summarize the news.", trap: "A made-up figure" },
-    { text: "Brief me on NVIDIA and semiconductor supply chains.", trap: "Control: answerable from real news" },
+    { text: "Brief me on NVIDIA and semiconductor supply chains.", trap: "Control question, answerable from real news" },
   ],
 };
 const GENERIC: Trick[] = [

@@ -435,7 +435,7 @@ export default function Builder() {
             <div className="preview">
               <div className="panel-title">Live preview</div>
               <div className="pv-grid">
-                <div><h5>System role</h5><p className="pv-instr">{draft.instructions.trim().split("\n").slice(0, 3).join(" ").slice(0, 220) || "—"}{draft.instructions.length > 220 ? "…" : ""}</p></div>
+                <div><h5>System role</h5><p className="pv-instr">{draft.instructions.trim().split("\n").slice(0, 3).join(" ").slice(0, 220) || "No instructions yet"}{draft.instructions.length > 220 ? "…" : ""}</p></div>
                 <div>
                   <h5>Readiness</h5>
                   {problems.length === 0 ? <p className="ok-t"><Check size={13} /> {saved?.status === "deployed" ? (dirty ? "Deployed · unsaved changes" : "Deployed · up to date") : "Ready to deploy"}</p> : <ul className="todo">{problems.map((p) => <li key={p}><AlertTriangle size={12} />{p}</li>)}</ul>}

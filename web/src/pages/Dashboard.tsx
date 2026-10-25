@@ -72,13 +72,13 @@ export default function Dashboard() {
         {loading ? [0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="kpi"><Skeleton h={12} w="50%" /><Skeleton h={26} w="70%" style={{ marginTop: 10 }} /></div>) : s && (
           <>
             <Kpi icon={<Activity size={13} />} label="Total runs" value={fmtInt(s.total_runs)} sub={`${s.completed_runs} completed · ${s.failed_runs} failed`} />
-            <Kpi icon={<Timer size={13} />} label="Avg latency" value={s.avg_latency_ms === null ? "—" : fmtMs(s.avg_latency_ms)} sub="from stored run times" />
+            <Kpi icon={<Timer size={13} />} label="Avg latency" value={s.avg_latency_ms === null ? "n/a" : fmtMs(s.avg_latency_ms)} sub="from stored run times" />
             <Kpi icon={<Gauge size={13} />} label="Error rate" value={fmtPct(s.error_rate)} tone={s.error_rate > 0 ? "err" : undefined} sub="failed ÷ (completed + failed)" />
             <Kpi icon={<Cpu size={13} />} label="Tokens" value={fmtCompact(s.input_tokens + s.output_tokens)} sub={`${fmtInt(s.input_tokens)} in · ${fmtInt(s.output_tokens)} out`} />
             <Kpi icon={<Coins size={13} />} label="Est. cost" value={s.estimated_cost_usd === null ? <span className="na">Not available</span> : fmtUsd(s.estimated_cost_usd)} sub={s.estimated_cost_usd === null ? "no pricing configured" : "estimate from configured pricing"} />
             <Kpi icon={<Search size={13} />} label="SerpApi calls" value={fmtInt(s.serpapi_calls)} sub="live requests only" />
             <Kpi icon={<Database size={13} />} label="Cache hits" value={fmtInt(s.cache_hits)} sub="served without a new request" />
-            <Kpi icon={<ShieldCheck size={13} />} label="Verified figures" value={s.claims_total ? `${s.claims_verified}/${s.claims_total}` : "—"} tone={s.claims_total && s.claims_verified === s.claims_total ? "ok" : undefined} sub={s.claims_total ? fmtPct(s.claims_verified / s.claims_total) + " backed by tools" : "no figures checked yet"} />
+            <Kpi icon={<ShieldCheck size={13} />} label="Verified figures" value={s.claims_total ? `${s.claims_verified}/${s.claims_total}` : "n/a"} tone={s.claims_total && s.claims_verified === s.claims_total ? "ok" : undefined} sub={s.claims_total ? fmtPct(s.claims_verified / s.claims_total) + " backed by tools" : "no figures checked yet"} />
           </>
         )}
       </div>
@@ -121,8 +121,8 @@ export default function Dashboard() {
                     <td className="trunc">{r.user_message}</td>
                     <td><StatusPill status={r.status} /></td>
                     <td className="num mono">{fmtMs(r.total_latency_ms)}</td>
-                    <td className="num mono">{r.input_tokens === null ? "—" : fmtInt((r.input_tokens ?? 0) + (r.output_tokens ?? 0))}</td>
-                    <td className="num mono">{r.claims_total ? `${r.claims_verified}/${r.claims_total}` : "—"}</td>
+                    <td className="num mono">{r.input_tokens === null ? "n/a" : fmtInt((r.input_tokens ?? 0) + (r.output_tokens ?? 0))}</td>
+                    <td className="num mono">{r.claims_total ? `${r.claims_verified}/${r.claims_total}` : "n/a"}</td>
                     <td className="dim" title={fmtDateTime(r.started_at)}>{relTime(r.started_at)}</td>
                   </tr>
                 ))}

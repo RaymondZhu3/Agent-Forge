@@ -21,7 +21,7 @@ $env:VITE_API_TARGET="http://localhost:8000"
 npm run dev
 ```
 
-**Against Vultr** (what judges see): only the second terminal, without `VITE_API_TARGET`. If it's set in that terminal, run `Remove-Item Env:VITE_API_TARGET` first.
+**Against Vultr** (what judges see): only the second terminal, without `VITE_API_TARGET`. If it's still set in that terminal, run `Remove-Item Env:VITE_API_TARGET` first.
 
 ```powershell
 cd web
@@ -51,7 +51,7 @@ Someone told me my Logitech MX Master 3S mouse is $59 on Amazon. Is that true?
 - [ ] Fact-check list: $59 = "From your message, no tool confirms it".
 - [ ] **Verify record** on the Audit receipt → **"Record intact"**.
 
-If no price is verified: Google Shopping returned junk this time — ask again; the agent retries with a fuller name. Never demo AirPods Pro 2 for the price half (resale-only results).
+If no price is verified, Google Shopping probably returned junk this time. Ask again and the agent will retry with a fuller name. Don't use AirPods Pro 2 for the price half of the demo, since its results are resale only.
 
 ## 3. Demo account
 - [ ] Chat header → **Demo account**: 11 purchases (incl. **Logitech MX Master 3S, Amazon, $109**) and 3 bills ($121.98/mo). Label says Live or Demo data. Esc closes it.
@@ -71,7 +71,7 @@ What do AirPods Pro 2 usually cost, and what's a good Black Friday price to wait
 - [ ] **"Self-corrected · N figures had no tool data…"** strip above the answer. **Show draft** → made-up prices crossed out, each marked "removed" (or "now verified").
 - [ ] The final answer has no unbacked prices.
 
-If there's no strip: Gemini didn't guess this time (not a bug). Ask again or rephrase ("roughly what do they cost?"). For the demo, keep a run that worked open in a tab or reachable from Observability.
+If there's no strip, Gemini didn't guess this time. That isn't a bug. Ask again or rephrase ("roughly what do they cost?"). For the demo, keep a run that worked open in a tab or reachable from Observability.
 
 ## 6. Compare (Smart Spend → Compare)
 - [ ] Click **"Netflix just raised prices by 40%…"**. Left (no fact-check) answers with unmarked numbers; right (audited) verifies $24.99, flags the 40% as yours, and may show "Self-corrected".

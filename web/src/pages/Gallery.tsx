@@ -13,7 +13,7 @@ import type { AgentConfig, AgentCreate, ToolMetadata } from "../types";
 const TEMPLATE_BLURB: Record<string, { use: string; tag: string }> = {
   smart_spend: { tag: "Banking + shopping", use: "Reads purchases and bills from a Capital One account, finds savings, and checks prices across stores." },
   news_monitor: { tag: "Research", use: "Searches current news on any topic and returns a source-backed briefing with original links." },
-  blank: { tag: "Custom", use: "Start from scratch: write instructions and pick the tools your agent can use." },
+  blank: { tag: "Custom", use: "Start from scratch. Write instructions and pick the tools your agent can use." },
 };
 
 function TemplatePreview({ tpl, tools, onClose }: { tpl: AgentCreate; tools: ToolMetadata[]; onClose: () => void }) {
@@ -79,7 +79,7 @@ function AgentRow({ a, onDelete }: { a: AgentConfig; onDelete: (a: AgentConfig) 
           <StatusPill status={a.status} />
         </div>
         <div className="muted sm">
-          {templateLabel(a.template)} · <span className="mono">{a.model}</span> · v{a.version} · updated {relTime(a.updated_at)}
+          {templateLabel(a.template)} · <span className="mono">{a.model}</span> · v{a.version}{a.updated_at ? <> · updated {relTime(a.updated_at)}</> : null}
         </div>
         <TrustBadge agentId={a.id} />
         <div className="chips">
@@ -125,7 +125,7 @@ export default function Gallery() {
         <div>
           <div className="eyebrow mono">AGENT FORGE</div>
           <h1>Build agents on real data.<br /><span className="grad">Trust every answer.</span></h1>
-          <p>Compose an agent from live tools, deploy it, and watch every step it takes — each figure it states is checked against the tool results behind it.</p>
+          <p>Compose an agent from live tools, deploy it, and watch every step it takes. Every figure it states is checked against the tool results behind it.</p>
         </div>
         <div className="hero-actions">
           <Link to="/builder" className="btn primary"><Plus size={15} /> New agent</Link>

@@ -54,7 +54,7 @@ export default function AuditPanel({ agentId, limit = 25 }: { agentId?: string; 
           {busy ? <Loader2 size={13} className="spin" /> : <ShieldCheck size={13} />} {t ? "Audit again" : `Audit the last ${limit} runs`}
         </button>
       </div>
-      {!t && !busy && !err && <p className="muted sm">Re-checks every stored run: recomputes each audit receipt from the database and counts what the fact-check caught.</p>}
+      {!t && !busy && !err && <p className="muted sm">Re-checks every stored run. It recomputes each audit receipt from the database and counts what the fact-check caught.</p>}
       {err && <p className="err-t sm">{err}</p>}
       {t && (
         <>

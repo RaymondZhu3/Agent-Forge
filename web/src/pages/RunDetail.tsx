@@ -39,10 +39,10 @@ export default function RunDetail() {
 
       <div className="kpis small">
         <div className="kpi"><div className="kpi-label">Total latency</div><div className="kpi-value mono">{fmtMs(r.total_latency_ms)}</div><div className="kpi-sub">model {fmtMs(llmMs)} · tools {fmtMs(toolMs)}</div></div>
-        <div className="kpi"><div className="kpi-label">Tokens</div><div className="kpi-value mono">{r.input_tokens === null ? "—" : fmtInt((r.input_tokens ?? 0) + (r.output_tokens ?? 0))}</div><div className="kpi-sub">{fmtInt(r.input_tokens)} in · {fmtInt(r.output_tokens)} out</div></div>
+        <div className="kpi"><div className="kpi-label">Tokens</div><div className="kpi-value mono">{r.input_tokens === null ? "n/a" : fmtInt((r.input_tokens ?? 0) + (r.output_tokens ?? 0))}</div><div className="kpi-sub">{fmtInt(r.input_tokens)} in · {fmtInt(r.output_tokens)} out</div></div>
         <div className="kpi"><div className="kpi-label">Est. cost</div><div className="kpi-value mono">{r.estimated_cost_usd === null ? <span className="na">Not available</span> : fmtUsd(r.estimated_cost_usd)}</div><div className="kpi-sub">{r.estimated_cost_usd === null ? "no pricing configured" : "estimate"}</div></div>
         <div className="kpi"><div className="kpi-label">Steps</div><div className="kpi-value mono">{steps.length}</div><div className="kpi-sub">{toolSteps.length} tool calls</div></div>
-        <div className="kpi"><div className="kpi-label">Figures verified</div><div className={`kpi-value mono ${r.claims_total && r.claims_verified < r.claims_total ? "warn-t" : r.claims_total ? "ok-t" : ""}`}>{r.claims_total ? `${r.claims_verified}/${r.claims_total}` : "—"}</div><div className="kpi-sub">{r.blocked ? <><ShieldAlert size={11} /> some redacted</> : <><ShieldCheck size={11} /> fact-check</>}</div></div>
+        <div className="kpi"><div className="kpi-label">Figures verified</div><div className={`kpi-value mono ${r.claims_total && r.claims_verified < r.claims_total ? "warn-t" : r.claims_total ? "ok-t" : ""}`}>{r.claims_total ? `${r.claims_verified}/${r.claims_total}` : "n/a"}</div><div className="kpi-sub">{r.blocked ? <><ShieldAlert size={11} /> some redacted</> : <><ShieldCheck size={11} /> fact-check</>}</div></div>
       </div>
 
       {r.error && <ErrorBanner title="Run failed" message={r.error} />}

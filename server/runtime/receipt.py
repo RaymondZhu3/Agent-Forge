@@ -118,7 +118,7 @@ def verify_run(run: dict[str, Any]) -> dict[str, Any]:
                 run.get("user_message") or run.get("userMessage") or "", steps[: idx + 1],
                 run.get("assistant_message") if "assistant_message" in run else run.get("assistantMessage"))
     if got["hash"] == stored.get("hash"):
-        return {"ok": True, "reason": f"Record intact: {idx + 1} steps and the answer match the receipt.", "hash": got["hash"]}
+        return {"ok": True, "reason": f"The record is intact. All {idx + 1} steps and the answer match the receipt.", "hash": got["hash"]}
     for i, (a, b) in enumerate(zip(got["steps"], stored.get("steps") or [])):
         if a != b:
             return {"ok": False, "reason": f"Record changed at step {steps[i].get('step', i + 1)}.", "hash": got["hash"]}

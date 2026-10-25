@@ -1,4 +1,4 @@
-/* Audit receipts — browser side of server/runtime/receipt.py. Must produce byte-identical canonical JSON:
+/* Audit receipts, browser side of server/runtime/receipt.py. Must produce byte-identical canonical JSON:
    sorted keys, no whitespace, JS number formatting (Python mimics it), non-ASCII kept as-is. */
 import type { Run, RunStep } from "../types";
 
@@ -107,7 +107,7 @@ export async function verifyRun(run: Run): Promise<ReceiptCheck> {
     links.push(h);
   }
   const final = await sha256(h + "\n" + canonical({ answer: run.assistant_message ?? "" }));
-  if (final === stored.hash) return { ok: true, reason: `Record intact: ${idx + 1} steps and the answer match the receipt.`, steps: idx + 1 };
+  if (final === stored.hash) return { ok: true, reason: `The record is intact. All ${idx + 1} steps and the answer match the receipt.`, steps: idx + 1 };
   const bad = links.findIndex((x, i) => x !== stored.steps?.[i]);
   return { ok: false, reason: bad >= 0 ? `Record changed at step ${steps[bad].step}.` : "The answer was changed after the run.", steps: idx + 1, badIndex: bad >= 0 ? bad : links.length };
 }

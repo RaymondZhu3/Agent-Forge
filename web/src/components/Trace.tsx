@@ -32,7 +32,7 @@ function StepIcon({ s }: { s: RunStep }) {
 }
 
 function Json({ value }: { value: unknown }) {
-  if (value === null || value === undefined) return <span className="dim">—</span>;
+  if (value === null || value === undefined) return <span className="dim">none</span>;
   return <pre className="json">{JSON.stringify(value, null, 2)}</pre>;
 }
 

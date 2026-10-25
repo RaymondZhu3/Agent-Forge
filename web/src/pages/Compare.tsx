@@ -77,7 +77,7 @@ export default function Compare() {
       <header className="page-head">
         <div>
           <h1>Same question, with and without Agent Forge</h1>
-          <p className="muted">Left: {a.name} with the fact-check off. Right: the same agent, audited. Same model, tools and instructions.</p>
+          <p className="muted">On the left, {a.name} with the fact-check turned off. On the right, the same agent with Agent Forge checking every figure. Same model, tools and instructions.</p>
         </div>
       </header>
 
@@ -90,7 +90,7 @@ export default function Compare() {
           {prompts.map((p) => <button key={p} className="chip cmp-chip" onClick={() => ask(p)} disabled={left.busy || right.busy}>{p}</button>)}
         </div>
       )}
-      {question && <p className="cmp-q"><span className="dim">Question:</span> {question}</p>}
+      {question && <p className="cmp-q"><span className="dim">You asked</span> “{question}”</p>}
 
       {question && (
         <div className="cmp-grid">

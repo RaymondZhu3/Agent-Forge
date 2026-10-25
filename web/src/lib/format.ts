@@ -1,10 +1,10 @@
 export const fmtMs = (ms: number | null | undefined): string => {
-  if (ms === null || ms === undefined) return "—";
+  if (ms === null || ms === undefined) return "n/a";
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)} s`;
 };
 
-export const fmtInt = (n: number | null | undefined): string => (n === null || n === undefined ? "—" : n.toLocaleString("en-US"));
+export const fmtInt = (n: number | null | undefined): string => (n === null || n === undefined ? "n/a" : n.toLocaleString("en-US"));
 
 export const fmtCompact = (n: number): string =>
   new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
@@ -14,14 +14,14 @@ export const fmtPct = (x: number): string => `${(x * 100).toFixed(x > 0 && x < 0
 export const fmtUsd = (x: number | null | undefined): string => (x === null || x === undefined ? "Not available" : `$${x.toFixed(4)}`);
 
 export const fmtDateTime = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
+  if (!iso) return "unknown";
   return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
 };
 
 export const fmtTime = (iso: string): string => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
 export const relTime = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
+  if (!iso) return "unknown";
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return "just now";
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;

@@ -86,7 +86,7 @@ export function ToolBars({ stats }: { stats: ToolAnalytics[] }) {
             {s.errors > 0 && <span className="tb-err" style={{ width: `${(s.errors / max) * 100}%` }} />}
           </div>
           <div className="tb-sub mono">
-            avg {s.avg_ms === null ? "—" : `${Math.round(s.avg_ms)} ms`}
+            avg {s.avg_ms === null ? "n/a" : `${Math.round(s.avg_ms)} ms`}
             {s.errors > 0 && <span className="err-t"> · {s.errors} errors</span>}
             {s.cache_hits > 0 && <span> · {s.cache_hits} cached</span>}
             {s.fixture_calls > 0 && <span className="warn-t"> · {s.fixture_calls} demo</span>}
