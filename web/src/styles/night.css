@@ -71,3 +71,17 @@ h5 { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--tx-2
 .rc-note { margin: 0; font-size: 11.5px; }
 .rc-chain li.bad, .rc-chain li.bad .mono { color: var(--err); font-weight: 600; }
 .rc-chain li.bad > span:nth-child(2)::after { content: " (changed after the run)"; font-weight: 500; }
+
+/* ---------- figure -> source (hover/focus a chip) ---------- */
+.turn-body { position: relative; }
+.fig.live { cursor: help; outline: none; transition: box-shadow var(--t1); }
+.fig.live:hover, .fig.live:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 35%, transparent); }
+.du-card { transition: border-color var(--t2), box-shadow var(--t2), transform var(--t2); }
+.du-card.lit { border-color: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); transform: translateY(-1px); }
+.fig-link { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 3; }
+.fig-link path { fill: none; stroke: color-mix(in srgb, var(--ok) 75%, transparent); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.fig-link circle { fill: var(--ok); }
+.fig-tip { position: absolute; z-index: 4; transform: translateX(-50%); pointer-events: none; white-space: nowrap; font-size: 12px; font-weight: 500;
+  padding: 5px 9px; border-radius: 6px; background: #0a1020; border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent); color: var(--tx); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+.fig-tip.u { border-color: color-mix(in srgb, var(--err) 60%, transparent); color: #ffc2c7; }
+@media (prefers-reduced-motion: reduce) { .du-card, .fig.live { transition: none; } .du-card.lit { transform: none; } }

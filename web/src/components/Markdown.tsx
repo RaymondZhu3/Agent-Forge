@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { Fragment, createContext, useContext, type ReactNode } from "react";
+import { describeFigure, type FigureInfo } from "../lib/figures";
 import { hostOf } from "../lib/format";
 
 /* Small purpose-built markdown renderer for agent answers (headings, nested lists, bold/italic/code, links).
@@ -14,23 +15,38 @@ type Item = { text: string; children: Block[] };
 
 const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/[^\s)\]]+|\*[^*\s][^*]*\*)/g;
 
-/** Fact-check result per figure as written ("$199.00" -> false). When provided, figures in the text are marked. */
-export const FigureMarks = createContext<Map<string, boolean> | null>(null);
+/** Fact-check result per figure as written ("$199.00" -> false or details). When provided, figures are marked. */
+export const FigureMarks = createContext<Map<string, boolean | FigureInfo> | null>(null);
+/** When provided, marked figures become focusable and report hover/focus (to light up their source). */
+export const FigureHover = createContext<((f: FigureInfo | null, el: HTMLElement | null) => void) | null>(null);
 const FIGURE = /\$\s?\d{1,3}(?:,\d{3})+(?:\.\d+)?|\$\s?\d+(?:\.\d+)?|(?<![\w.])\d+(?:\.\d+)?\s?%/g;
 
 function Figures({ text }: { text: string }) {
   const marks = useContext(FigureMarks);
+  const hover = useContext(FigureHover);
   if (!marks || !marks.size) return <>{text}</>;
   const out: ReactNode[] = [];
   let last = 0;
   for (const m of text.matchAll(FIGURE)) {
-    const ok = marks.get(m[0].trim());
-    if (ok === undefined) continue;
+    const raw = marks.get(m[0].trim());
+    if (raw === undefined) continue;
+    const f: FigureInfo = typeof raw === "boolean" ? { ok: raw } : raw;
     if (m.index! > last) out.push(text.slice(last, m.index));
+    const why = describeFigure(f);
     out.push(
-      <span key={m.index} className={`fig ${ok ? "v" : "u"}`} title={ok ? "Matches the data a tool returned" : "No tool returned this figure"}>
+      <span
+        key={m.index}
+        className={`fig ${f.ok ? "v" : "u"}${hover ? " live" : ""}`}
+        title={hover ? undefined : why}
+        tabIndex={hover ? 0 : undefined}
+        aria-label={hover ? `${m[0]}: ${why}` : undefined}
+        onMouseEnter={hover ? (e) => hover(f, e.currentTarget) : undefined}
+        onMouseLeave={hover ? () => hover(null, null) : undefined}
+        onFocus={hover ? (e) => hover(f, e.currentTarget) : undefined}
+        onBlur={hover ? () => hover(null, null) : undefined}
+      >
         {m[0]}
-        {!ok && <span className="sr"> (no tool returned this figure)</span>}
+        {!hover && !f.ok && <span className="sr"> (no tool returned this figure)</span>}
       </span>,
     );
     last = m.index! + m[0].length;

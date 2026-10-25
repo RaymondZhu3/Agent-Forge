@@ -1,8 +1,9 @@
 import { AlertTriangle, ArrowUp, ChevronDown, ExternalLink, FileSearch, Loader2, RotateCcw, ShieldAlert, ShieldCheck, Square } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
-import Markdown, { FigureMarks } from "../components/Markdown";
+import Markdown, { FigureHover, FigureMarks } from "../components/Markdown";
+import { describeFigure, figureMap, TOOL_NAMES, type FigureInfo } from "../lib/figures";
 import Receipt from "../components/Receipt";
 import ToolIcon from "../components/ToolIcon";
 import Trace, { stepLabel } from "../components/Trace";
@@ -32,7 +33,7 @@ const SUGGESTIONS: Record<string, { label: string; text: string }[]> = {
 
 /* ---------- pieces of an agent turn ---------- */
 
-function DataUsed({ steps }: { steps: RunStep[] }) {
+function DataUsed({ steps, lit }: { steps: RunStep[]; lit?: number | null }) {
   const tools = steps.filter((s) => s.type === "tool");
   if (!tools.length) return null;
   return (
@@ -42,7 +43,7 @@ function DataUsed({ steps }: { steps: RunStep[] }) {
         {tools.map((s) => {
           const { detail } = stepLabel(s);
           return (
-            <div key={s.step} className={`du-card${s.success ? "" : " failed"}`}>
+            <div key={s.step} data-step={s.step} className={`du-card${s.success ? "" : " failed"}${lit === s.step ? " lit" : ""}`}>
               <div className="du-top">
                 <ToolIcon name={s.toolName ?? ""} size={12} />
                 <span className="mono">{s.toolName}</span>
@@ -110,10 +111,6 @@ function FactCheck({ claims, blocked, mode }: { claims: Claim[]; blocked: boolea
   );
 }
 
-const TOOL_NAMES: Record<string, string> = {
-  nessie_purchases: "Nessie purchases", nessie_bills: "Nessie bills", nessie_accounts: "Nessie accounts",
-  serpapi_shopping: "Google Shopping", serpapi_web_search: "Google search", serpapi_news: "Google News", serpapi_local_places: "Google Local",
-};
 
 type VerifyOut = { draft?: string; invented?: string[]; fixed?: string[]; used_correction?: boolean };
 
@@ -177,19 +174,19 @@ function SelfCorrection({ res }: { res: ChatResponse }) {
 function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
   const [showTrace, setShowTrace] = useState(false);
   const sources = useMemo(() => extractUrls(res.assistant_message), [res.assistant_message]);
-  // A figure counts as backed if any mention of it is.
-  const answerMarks = useMemo(() => {
-    const m = new Map<string, boolean>();
-    for (const c of res.claims) m.set(c.text, (m.get(c.text) ?? false) || c.verified);
-    return m;
-  }, [res.claims]);
+  const answerMarks = useMemo(() => figureMap(res.claims), [res.claims]);
+  // Hover/focus a figure chip -> light up the tool card it came from, draw a line, explain it.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [focus, setFocus] = useState<{ f: FigureInfo; el: HTMLElement } | null>(null);
+  const onFigure = useCallback((f: FigureInfo | null, el: HTMLElement | null) => setFocus(f && el ? { f, el } : null), []);
+  const litStep = focus?.f.ok ? focus.f.step ?? null : null;
   const fixtureOnly = res.data_modes.length > 0 && res.data_modes.every((m) => m === "fixture");
   const failed = res.status === "failed";
 
   return (
     <div className="turn agent">
       <AgentAvatar seed={agent.id} size={30} />
-      <div className="turn-body">
+      <div className="turn-body" ref={bodyRef}>
         <div className="turn-meta">
           <strong>{agent.name}</strong>
           <StatusPill status={res.status} />
@@ -199,12 +196,14 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
         </div>
         {fixtureOnly && <p className="note warn"><AlertTriangle size={12} /> This answer used demo data, not live API results.</p>}
         {failed && <ErrorBanner title="The agent couldn't finish" message={res.error ?? "Unknown error"} />}
-        {!failed && <DataUsed steps={res.steps} />}
+        {!failed && <DataUsed steps={res.steps} lit={litStep} />}
         {!failed && <SelfCorrection res={res} />}
         {res.assistant_message && (
           <div className="answer">
             <FigureMarks.Provider value={answerMarks}>
-              <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
+              <FigureHover.Provider value={onFigure}>
+                <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
+              </FigureHover.Provider>
             </FigureMarks.Provider>
           </div>
         )}
@@ -225,8 +224,44 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
           <Link to={`/runs/${res.run_id}`} className="link-btn mono">{res.run_id}</Link>
         </div>
         {showTrace && <Trace steps={res.steps} compact />}
+        {focus && <FigureSource body={bodyRef.current} chip={focus.el} f={focus.f} />}
       </div>
     </div>
+  );
+}
+
+/** Line from a figure chip to the "Data used" card it came from, plus a one-line explanation. */
+function FigureSource({ body, chip, f }: { body: HTMLDivElement | null; chip: HTMLElement; f: FigureInfo }) {
+  const [geo, setGeo] = useState<{ x1: number; y1: number; x2: number; y2: number; w: number; h: number; tipX: number; tipY: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!body) return;
+    const b = body.getBoundingClientRect();
+    const c = chip.getBoundingClientRect();
+    const card = f.ok && f.step != null ? body.querySelector<HTMLElement>(`.du-card[data-step="${f.step}"]`) : null;
+    const k = card?.getBoundingClientRect();
+    setGeo({
+      x1: c.left - b.left + c.width / 2, y1: c.top - b.top,
+      x2: k ? k.left - b.left + k.width / 2 : 0, y2: k ? k.bottom - b.top : 0,
+      w: b.width, h: b.height,
+      tipX: Math.min(Math.max(c.left - b.left + c.width / 2, 120), b.width - 120), tipY: c.bottom - b.top + 6,
+    });
+  }, [body, chip, f]);
+  if (!geo) return null;
+  const hasLine = f.ok && geo.y2 > 0;
+  const midY = (geo.y1 + geo.y2) / 2;
+  return (
+    <>
+      {hasLine && (
+        <svg className="fig-link" width={geo.w} height={geo.h} aria-hidden>
+          <path d={`M ${geo.x1} ${geo.y1} C ${geo.x1} ${midY}, ${geo.x2} ${midY}, ${geo.x2} ${geo.y2}`} />
+          <circle cx={geo.x1} cy={geo.y1} r="3" />
+          <circle cx={geo.x2} cy={geo.y2} r="3" />
+        </svg>
+      )}
+      <div className={`fig-tip${f.ok ? "" : " u"}`} style={{ left: geo.tipX, top: geo.tipY }} role="tooltip">
+        {describeFigure(f)}
+      </div>
+    </>
   );
 }
 
