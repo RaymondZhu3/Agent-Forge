@@ -28,8 +28,8 @@ export default function AgentAvatar({ seed, size = 40 }: { seed: string; size?: 
           <stop offset="1" stopColor={`hsl(${h2} 80% 58%)`} />
         </linearGradient>
       </defs>
-      <rect width="40" height="40" rx="8" fill="#0d1124" />
-      <rect x="0.5" y="0.5" width="39" height="39" rx="7.5" fill="none" stroke="#2a3260" />
+      <rect width="40" height="40" rx="8" fill="#111a30" />
+      <rect x="0.5" y="0.5" width="39" height="39" rx="7.5" fill="none" stroke="#2f3f66" />
       {cells.map(([x, y], i) => (
         <rect key={i} x={7 + x * 5.2} y={7 + y * 5.2} width="4.4" height="4.4" rx="1" fill={`url(#${gid})`} />
       ))}

@@ -32,8 +32,8 @@ export function RunsChart({ points }: { points: Point[] }) {
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Runs per hour" preserveAspectRatio="none">
         <defs>
           <linearGradient id="barg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#7b8cff" />
-            <stop offset="1" stopColor="#4f6bff" />
+            <stop offset="0" stopColor="#9aa4ff" />
+            <stop offset="1" stopColor="#8b97ff" />
           </linearGradient>
         </defs>
         {ticks.map((t, i) => (
@@ -51,7 +51,7 @@ export function RunsChart({ points }: { points: Point[] }) {
                aria-label={`${fmtTime(d.bucket)}: ${d.runs} runs, ${d.failed} failed`} className="bar-g">
               <rect x={padL + i * bw} y={padT} width={bw} height={innerH} fill="transparent" />
               {ok > 0 && <rect x={x} y={y(ok)} width={w} height={(ok / niceMax) * innerH} rx="1.5" fill="url(#barg)" className="grow" style={{ animationDelay: `${i * 18}ms` }} />}
-              {d.failed > 0 && <rect x={x} y={y(d.runs)} width={w} height={(d.failed / niceMax) * innerH} rx="1.5" fill="#ff6b7a" className="grow" />}
+              {d.failed > 0 && <rect x={x} y={y(d.runs)} width={w} height={(d.failed / niceMax) * innerH} rx="1.5" fill="#ff7480" className="grow" />}
               {i % every === 0 && (
                 <text x={x + w / 2} y={H - 8} textAnchor="middle" className="axis">{fmtTime(d.bucket)}</text>
               )}

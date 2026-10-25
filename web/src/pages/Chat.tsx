@@ -59,27 +59,48 @@ function DataUsed({ steps }: { steps: RunStep[] }) {
   );
 }
 
+const HOW: Record<string, string> = { difference: "difference", sum: "sum", annualized: "× 12" };
+/** The sentence a figure came from, without Markdown syntax. */
+const plain = (t: string) => t.replace(/\[([^\]]+)\]\([^)]*\)?/g, "$1").replace(/[*_`#]+/g, "").replace(/\s+/g, " ").trim();
+
+/** One row per figure as written; a figure counts as backed if any mention of it is. */
+function ledger(claims: Claim[]) {
+  const rows = new Map<string, { claim: Claim; times: number; verified: boolean }>();
+  for (const c of claims) {
+    const r = rows.get(c.text);
+    if (!r) rows.set(c.text, { claim: c, times: 1, verified: c.verified });
+    else { r.times++; if (c.verified && !r.verified) { r.claim = c; r.verified = true; } }
+  }
+  return [...rows.values()];
+}
+
 function FactCheck({ claims, blocked, mode }: { claims: Claim[]; blocked: boolean; mode?: string }) {
-  const [open, setOpen] = useState(false);
+  const rows = useMemo(() => ledger(claims), [claims]);
+  const bad = rows.filter((r) => !r.verified);
+  const [open, setOpen] = useState(bad.length > 0);
   if (mode === "off" && !claims.length) return null;
   if (!claims.length) return <div className="fact muted sm"><ShieldCheck size={13} /> No figures to verify in this answer.</div>;
-  const bad = claims.filter((c) => !c.verified);
   return (
     <div className={`fact${bad.length ? " warn" : " ok"}`}>
       <button className="fact-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         {bad.length ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
-        <strong>{claims.length - bad.length} of {claims.length} figures verified</strong>
+        <strong>{rows.length - bad.length} of {rows.length} figures verified</strong>
         <span className="muted sm">{bad.length ? `${bad.length} not backed by tool data` : "every figure traced to a tool result"}</span>
         <ChevronDown size={13} className={`chev${open ? " open" : ""}`} />
       </button>
       {blocked && <p className="note warn"><ShieldAlert size={12} /> Unverified figures were redacted from this answer.</p>}
       {open && (
         <ul className="claims">
-          {[...bad, ...claims.filter((c) => c.verified)].map((c, i) => (
-            <li key={i} className={c.verified ? "v" : "u"}>
+          {[...bad, ...rows.filter((r) => r.verified)].map(({ claim: c, times, verified }) => (
+            <li key={c.text} className={verified ? "v" : "u"}>
               <span className="mono claim-t">{c.text}</span>
-              <span className="claim-c">{c.context}</span>
-              <span className="claim-s mono">{c.verified ? `${c.source_tool ?? "tool"} · step ${c.source_step}${c.how ? ` · ${c.how}` : ""}` : "unverified"}</span>
+              <span className="claim-c">{plain(c.context)}</span>
+              <span className="claim-s">
+                {verified
+                  ? `${TOOL_NAMES[c.source_tool ?? ""] ?? c.source_tool ?? "Tool"}, step ${c.source_step}${c.how && HOW[c.how] ? ` (${HOW[c.how]})` : ""}`
+                  : c.source_tool === "user_message" ? "From your message, no tool confirms it" : "No tool returned this"}
+                {times > 1 && <span className="dim"> ×{times}</span>}
+              </span>
             </li>
           ))}
         </ul>

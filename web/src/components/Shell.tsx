@@ -8,11 +8,11 @@ function Logo() {
     <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden>
       <defs>
         <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#6b9bff" />
-          <stop offset="1" stopColor="#a479ff" />
+          <stop offset="0" stopColor="#a7b0ff" />
+          <stop offset="1" stopColor="#8b97ff" />
         </linearGradient>
       </defs>
-      <rect width="32" height="32" rx="7" fill="#0e1226" stroke="#2a3260" />
+      <rect width="32" height="32" rx="7" fill="#111a30" stroke="#2f3f66" />
       <path d="M9 22 16 8l7 14h-4l-3-6-3 6z" fill="url(#lg)" />
     </svg>
   );
