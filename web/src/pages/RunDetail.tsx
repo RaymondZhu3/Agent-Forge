@@ -57,7 +57,7 @@ export default function RunDetail() {
           </section>
           <section className="card">
             <div className="card-head"><h2>Answer</h2></div>
-            {r.assistant_message ? <Markdown text={r.assistant_message} /> : <p className="muted sm">{r.status === "running" ? "Still running…" : "No answer was produced."}</p>}
+            {r.assistant_message ? <Markdown text={r.assistant_message} cards={agent.data?.template === "smart_spend"} stories={agent.data?.template === "news_monitor"} /> : <p className="muted sm">{r.status === "running" ? "Still running…" : "No answer was produced."}</p>}
           </section>
         </div>
       </div>

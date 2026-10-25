@@ -443,3 +443,15 @@ p.ok-t { display: flex; gap: 6px; align-items: center; font-size: 12.5px; }
 /* KPI strip: divider borders instead of a gap background so a partly filled last row stays clean */
 .kpis { gap: 0; background: var(--s0); }
 .kpis .kpi { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
+
+/* ---------- editorial story cards ---------- */
+.stories { display: grid; gap: 10px; }
+.story { padding: 14px 16px; border: 1px solid var(--line-2); border-radius: var(--r2); background: linear-gradient(180deg, var(--s1), var(--s0)); display: grid; gap: 7px; transition: border-color var(--t2); }
+.story:hover { border-color: #3d4a8c; }
+.story-meta { display: flex; gap: 12px; align-items: center; font-size: 11.5px; color: var(--tx-2); flex-wrap: wrap; }
+.story-meta .idx { color: var(--violet); font-weight: 600; }
+.story h3 { font-size: 16px; line-height: 1.3; letter-spacing: -0.01em; margin: 0; }
+.story p { font-size: 13.5px; color: var(--tx-2); line-height: 1.55; margin: 0; }
+.story-why { color: #cfd5ec !important; }
+.story-link { display: inline-flex; gap: 6px; align-items: center; width: fit-content; font-size: 12.5px; font-weight: 550; color: var(--blue); padding: 4px 0; border-bottom: 1px solid rgba(91, 140, 255, 0.35); }
+.story-link:hover { color: #8fb0ff; }

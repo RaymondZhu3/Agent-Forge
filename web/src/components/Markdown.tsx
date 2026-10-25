@@ -153,6 +153,64 @@ export function splitSections(src: string): { intro: Block[]; sections: { title:
   return { intro, sections, outro: [] };
 }
 
+
+/* ---------- editorial story cards (News Monitor) ----------
+   A story is a top-level bullet whose sub-bullets look like "**Label:** value". */
+
+type Story = { title: string; fields: { label: string; value: string }[] };
+const fieldRe = /^\*\*([^*]{1,40}?):?\*\*:?\s*(.*)$/;
+
+export function extractStories(blocks: Block[]): { before: Block[]; stories: Story[]; after: Block[] } | null {
+  const stories: Story[] = [];
+  const before: Block[] = [];
+  const after: Block[] = [];
+  for (const b of blocks) {
+    if (b.t === "list") {
+      const found = b.items.map((it) => {
+        const kids = it.children.flatMap((c) => (c.t === "list" ? c.items : []));
+        const fields = kids.map((k) => fieldRe.exec(k.text)).filter(Boolean).map((m) => ({ label: m![1].replace(/:$/, ""), value: m![2] }));
+        return fields.length >= 2 ? { title: it.text.replace(/^\*\*(.+)\*\*$/, "$1"), fields } : null;
+      });
+      if (found.some(Boolean)) {
+        found.forEach((f) => f && stories.push(f));
+        continue;
+      }
+    }
+    (stories.length ? after : before).push(b);
+  }
+  return stories.length >= 1 ? { before, stories, after } : null;
+}
+
+const firstUrl = (v: string): string | null => /\((https?:\/\/[^)\s]+)\)/.exec(v)?.[1] ?? /(https?:\/\/[^\s)]+)/.exec(v)?.[0] ?? null;
+
+function StoryCard({ story, index }: { story: Story; index: number }) {
+  const get = (k: RegExp) => story.fields.find((f) => k.test(f.label.toLowerCase()));
+  const source = get(/^source/), date = get(/^date|publish/), link = get(/^(url|link)/);
+  const rest = story.fields.filter((f) => f !== source && f !== date && f !== link);
+  const url = link ? firstUrl(link.value) : null;
+  return (
+    <article className="story">
+      <div className="story-meta mono">
+        <span className="idx">{String(index + 1).padStart(2, "0")}</span>
+        {source && <span>{source.value.replace(/\*\*/g, "")}</span>}
+        {date && <span className="dim">{date.value}</span>}
+      </div>
+      <h3>{renderInline(story.title)}</h3>
+      {rest.map((f) => (
+        <p key={f.label} className={/matter|why|summary/i.test(f.label) ? "story-why" : ""}>
+          {!/matter|why|summary/i.test(f.label) && <strong>{f.label}: </strong>}
+          {renderInline(f.value)}
+        </p>
+      ))}
+      {url && (
+        <a className="story-link" href={url} target="_blank" rel="noopener noreferrer">
+          Read original{source ? ` on ${source.value.replace(/\*\*/g, "")}` : ""} <ExternalLink size={12} />
+        </a>
+      )}
+    </article>
+  );
+}
+
 export function MarkdownBlocks({ blocks }: { blocks: Block[] }) {
   return (
     <div className="md">
@@ -161,7 +219,18 @@ export function MarkdownBlocks({ blocks }: { blocks: Block[] }) {
   );
 }
 
-export default function Markdown({ text, cards = false }: { text: string; cards?: boolean }) {
+export default function Markdown({ text, cards = false, stories = false }: { text: string; cards?: boolean; stories?: boolean }) {
+  if (stories) {
+    const ex = extractStories(parse(text).filter((b) => b.t !== "hr"));
+    if (ex)
+      return (
+        <div className="md">
+          {ex.before.length > 0 && <Blocks blocks={ex.before} />}
+          <div className="stories">{ex.stories.map((st, i) => <StoryCard key={i} story={st} index={i} />)}</div>
+          {ex.after.length > 0 && <Blocks blocks={ex.after} />}
+        </div>
+      );
+  }
   if (!cards) return <MarkdownBlocks blocks={parse(text)} />;
   const { intro, sections } = splitSections(text);
   if (sections.length < 2) return <MarkdownBlocks blocks={parse(text)} />;

@@ -110,7 +110,7 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
         {!failed && <DataUsed steps={res.steps} />}
         {res.assistant_message && (
           <div className="answer">
-            <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} />
+            <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
           </div>
         )}
         {sources.length > 0 && (
