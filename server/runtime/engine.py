@@ -18,6 +18,8 @@ from tools.base import Tool, ToolRegistry, ToolResult
 from tools.registry import registry as default_registry
 
 from .llm import LLM, FunctionCall, GeminiLLM, LLMError, LLMTurn
+from .receipt import chain as receipt_chain
+from .receipt import data_hash
 from .verify import USER_SOURCE, mark_user_figures, verify_answer
 
 RUN_TIMEOUT_S = float(os.getenv("RUN_TIMEOUT_S", "90"))
@@ -241,7 +243,9 @@ def run_agent(
                     type="tool",
                     tool_name=call.name,
                     input=call.args,
-                    output={"summary": tool.summarize(res), "mode": res.mode if res.ok else None, "preview": _preview(res.data)},
+                    output={"summary": tool.summarize(res), "mode": res.mode if res.ok else None, "preview": _preview(res.data),
+                        # fingerprint of the full raw tool data (not stored); covered by the run's receipt
+                        **({"data_sha256": data_hash(res.data)} if res.ok else {})},
                     ms=res.duration_ms,
                     success=res.ok,
                     cached=res.cached,
@@ -274,23 +278,25 @@ def run_agent(
         return cl, [c for c in cl if not c.verified and c.source_tool != USER_SOURCE]
 
     # 1) Check the draft. 2) If the model stated figures no tool returned, send them back once to be sourced or
-    # removed (self-correction), and keep the corrected answer if it is no worse. 3) Apply flag/block to the result.
+    # removed (self-correction), and keep the corrected answer if it is no worse. 3) Apply flag/block to the result
+    # and record it in ONE final verify step, with the figure list and the audit receipt. Steps are persisted as they
+    # are added (hooks.on_step), so nothing may be changed after add_step or the stored record won't match.
     t0 = time.perf_counter()
     claims, invented = check(final_text)
     attempt = bool(invented) and REPAIR_ENABLED and time.perf_counter() - started < RUN_TIMEOUT_S - REPAIR_MIN_S
-    add_step(
-        type="verify",
-        input={"mode": mode, "stage": "draft" if attempt else "final"},
-        output={
-            "claims": len(claims), "verified": sum(c.verified for c in claims),
-            "unverified": [c.text for c in claims if not c.verified], "blocked": False,
-            "invented": [c.text for c in invented], "user_supplied": [c.text for c in claims if c.source_tool == USER_SOURCE],
-            **({"draft": final_text, "correcting": True} if attempt else {}),
-        },
-        ms=int((time.perf_counter() - t0) * 1000),
-    )
-    chosen = final_text
+    chosen, stage, correction = final_text, "final", {}
     if attempt:
+        add_step(
+            type="verify",
+            input={"mode": mode, "stage": "draft"},
+            output={
+                "claims": len(claims), "verified": sum(c.verified for c in claims),
+                "unverified": [c.text for c in claims if not c.verified], "blocked": False,
+                "invented": [c.text for c in invented], "user_supplied": [c.text for c in claims if c.source_tool == USER_SOURCE],
+                "draft": final_text, "correcting": True,
+            },
+            ms=int((time.perf_counter() - t0) * 1000),
+        )
         history.append({"role": "model", "turn": final_turn})
         history.append({"role": "user", "text": repair_request(invented)})
         try:
@@ -300,26 +306,26 @@ def run_agent(
         fixed_text = fixed_turn.text.strip() if fixed_turn else ""
         if fixed_text:
             t0 = time.perf_counter()
-            claims2, invented2 = check(fixed_text)
+            _, invented2 = check(fixed_text)
             kept = len(invented2) <= len(invented)
             if kept:
                 chosen = fixed_text
-            before = {c.text for c in invented}
-            add_step(
-                type="verify",
-                input={"mode": mode, "stage": "corrected"},
-                output={
-                    "claims": len(claims2), "verified": sum(c.verified for c in claims2),
-                    "unverified": [c.text for c in claims2 if not c.verified], "blocked": False,
-                    "invented": [c.text for c in invented2],
-                    "fixed": sorted(before - {c.text for c in invented2}),
-                    "used_correction": kept,
-                },
-                ms=int((time.perf_counter() - t0) * 1000),
-            )
+            stage = "corrected"
+            correction = {"fixed": sorted({c.text for c in invented} - {c.text for c in invented2}), "used_correction": kept}
 
     answer, claims, blocked = verify_answer(chosen, tool_outputs, mode)
     mark_user_figures(claims, message)
-    if blocked and steps and steps[-1].type == "verify" and isinstance(steps[-1].output, dict):
-        steps[-1].output["blocked"] = True
+    _, left = check(chosen)
+    out = {
+        "claims": len(claims), "verified": sum(c.verified for c in claims),
+        "unverified": [c.text for c in claims if not c.verified], "blocked": blocked,
+        "invented": [c.text for c in left], "user_supplied": [c.text for c in claims if c.source_tool == USER_SOURCE],
+        **correction,
+        # The per-figure result, stored with the run (and covered by the receipt).
+        "figures": [[c.text, c.verified, c.source_tool, c.source_step, c.how] for c in claims],
+    }
+    record = {"step": len(steps) + 1, "type": "verify", "tool_name": None, "input": {"mode": mode, "stage": stage},
+              "output": out, "success": True, "error": None}
+    out["receipt"] = receipt_chain(run_id, agent.id, message, [s.model_dump() for s in steps] + [record], answer)
+    add_step(type="verify", input=record["input"], output=out, ms=int((time.perf_counter() - t0) * 1000))
     return finish("completed", answer, claims=claims, blocked=blocked)

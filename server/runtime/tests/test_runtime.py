@@ -56,7 +56,10 @@ def test_smart_spend_multi_tool_run_and_fact_check():
     r = run_agent(agent(), "Find savings", "s1", hooks=hooks, llm=llm)
 
     assert r.status == "completed"
-    assert [s.type for s in r.steps] == ["llm", "tool", "llm", "tool", "llm", "verify"]
+    # "$15.00" is made up -> a correction is attempted (this script has no turn for it, so it fails quietly);
+    # the run ends with the draft check plus the final check, which carries the audit receipt.
+    assert [s.type for s in r.steps] == ["llm", "tool", "llm", "tool", "llm", "verify", "verify"]
+    assert [s.input["stage"] for s in r.steps if s.type == "verify"] == ["draft", "final"]
     assert r.steps[1].output["summary"].startswith("11 purchases")
     assert r.steps[1].fixture is True and r.data_modes == ["fixture"]
     assert r.usage.input_tokens == 600 and r.usage.output_tokens == 70
