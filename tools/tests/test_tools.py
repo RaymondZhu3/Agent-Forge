@@ -254,3 +254,15 @@ def test_brand_store_counts_as_trusted_retailer():
     assert serpapi._trusted("logitech.com", "Logitech MX Master 3S")
     assert not serpapi._trusted("appstle.com", "Logitech MX Master 3S")
     assert not serpapi._trusted("Logitech", "MX Master 3S mouse")  # brand must be in the query
+
+
+
+def test_shopping_links_have_no_raw_spaces(monkeypatch):
+    """Live 8:50 PM: '[Logitech](https://www.google.com/search?q=Logitech MX Master 3S&...)' rendered broken."""
+    from tools import serpapi
+
+    raw = {"shopping_results": [{"title": "Logitech MX Master 3S Mouse", "source": "Logitech", "extracted_price": 79.99,
+                                 "product_link": "https://www.google.com/search?ibp=oshop&q=Logitech MX Master 3S&prds=x"}]}
+    monkeypatch.setattr(serpapi, "serp_request", lambda *a, **k: (raw, False, False))
+    data, _, _ = serpapi._shopping({"query": "Logitech MX Master 3S"}, {})
+    assert data["products"][0]["url"] == "https://www.google.com/search?ibp=oshop&q=Logitech%20MX%20Master%203S&prds=x"

@@ -123,6 +123,12 @@ TRUSTED_RETAILERS = (
 )
 
 
+def _url(u: str | None) -> str | None:
+    """Google Shopping links contain raw spaces (q=Logitech MX Master 3S), which break the Markdown links the
+    model writes (live 8:50 PM). Encode whitespace; leave everything else as returned."""
+    return "".join("%20" if c == " " else c for c in u.strip()) if isinstance(u, str) else u
+
+
 def _trusted(source: str | None, query: str = "") -> bool:
     """Major retailer, or the brand's own store (query "Logitech MX Master 3S" -> source "Logitech" / "logitech.com").
     Marketplace sellers ("Walmart - 6AVE Electronics") count as the retailer they list on."""
@@ -167,7 +173,7 @@ def _shopping(input: dict[str, Any], settings: dict[str, Any]):
                 "merchant": r.get("source"),
                 "trusted_retailer": _trusted(r.get("source"), input["query"]),
                 "rating": r.get("rating"),
-                "url": r.get("product_link") or r.get("link"),
+                "url": _url(r.get("product_link") or r.get("link")),
             })
     trusted = [p["price"] for p in products if p["price"] is not None and p["trusted_retailer"]]
     prices = trusted or [p["price"] for p in products if p["price"] is not None]
@@ -239,7 +245,7 @@ def _news(input: dict[str, Any], settings: dict[str, Any]):
             "title": item.get("title"),
             "source": (item.get("source") or {}).get("name"),
             "published": item.get("iso_date") or item.get("date"),  # None when unknown — never guessed
-            "url": item.get("link"),
+            "url": _url(item.get("link")),
             "snippet": item.get("snippet"),
         })
         if len(stories) >= int(input.get("max_results") or 8):
@@ -280,7 +286,7 @@ def _web(input: dict[str, Any], settings: dict[str, Any]):
         {"engine": "google", "q": input["query"].strip(), "location": settings.get("location"), "gl": "us", "hl": "en"},
     )
     results = [
-        {"title": r.get("title"), "url": r.get("link"), "snippet": r.get("snippet"), "source": r.get("source")}
+        {"title": r.get("title"), "url": _url(r.get("link")), "snippet": r.get("snippet"), "source": r.get("source")}
         for r in (raw.get("organic_results") or [])[: int(input.get("max_results") or 6)]
     ]
     ab = raw.get("answer_box") or {}
