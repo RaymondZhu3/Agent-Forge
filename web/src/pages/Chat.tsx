@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowUp, ChevronDown, ExternalLink, FileSearch, Loader2,
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
-import Markdown from "../components/Markdown";
+import Markdown, { FigureMarks } from "../components/Markdown";
 import ToolIcon from "../components/ToolIcon";
 import Trace, { stepLabel } from "../components/Trace";
 import { EmptyState, ErrorBanner, ModeBadge, Skeleton, StatusPill, modeOf } from "../components/ui";
@@ -88,6 +88,70 @@ function FactCheck({ claims, blocked, mode }: { claims: Claim[]; blocked: boolea
   );
 }
 
+const TOOL_NAMES: Record<string, string> = {
+  nessie_purchases: "Nessie purchases", nessie_bills: "Nessie bills", nessie_accounts: "Nessie accounts",
+  serpapi_shopping: "Google Shopping", serpapi_web_search: "Google search", serpapi_news: "Google News", serpapi_local_places: "Google Local",
+};
+
+type VerifyOut = { draft?: string; invented?: string[]; fixed?: string[]; used_correction?: boolean };
+
+/** Shown only when the platform sent made-up figures back to the agent (verify steps: stage draft -> corrected). */
+function SelfCorrection({ res }: { res: ChatResponse }) {
+  const [open, setOpen] = useState(false);
+  const verifies = res.steps.filter((s) => s.type === "verify");
+  const draftStep = verifies.find((s) => (s.output as VerifyOut | null)?.draft);
+  const fixStep = verifies.find((s) => (s.input as { stage?: string } | null)?.stage === "corrected");
+  const marks = useMemo(() => new Map(((draftStep?.output as VerifyOut)?.invented ?? []).map((t) => [t, false])), [draftStep]);
+  if (!draftStep) return null;
+  const d = draftStep.output as VerifyOut;
+  const f = (fixStep?.output ?? null) as VerifyOut | null;
+  const used = !!f?.used_correction;
+  const invented = d.invented ?? [];
+  const fixed = new Set(f?.fixed ?? []);
+  const nowVerified = new Map(res.claims.filter((c) => c.verified).map((c) => [c.text, c]));
+  const nFixed = invented.filter((t) => fixed.has(t)).length;
+  const summary = !f
+    ? "The correction didn't finish, so the original answer is shown"
+    : !used
+      ? "The correction wasn't better, so the original answer is shown"
+      : `${nFixed} ${nFixed === 1 ? "figure" : "figures"} had no tool data and ${nFixed === 1 ? "was" : "were"} fixed before you saw this answer`;
+
+  return (
+    <div className={`selfcorr${used ? "" : " kept"}`}>
+      <button className="sc-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <RotateCcw size={14} />
+        <strong>{used ? "Self-corrected" : "Correction attempted"}</strong>
+        <span className="muted sm">{summary}</span>
+        <span className="sc-toggle sm">{open ? "Hide draft" : "Show draft"}<ChevronDown size={13} className={`chev${open ? " open" : ""}`} /></span>
+      </button>
+      {open && (
+        <div className="sc-body">
+          <div className="sc-label sm">First draft (not shown to the user)</div>
+          <div className="sc-draft">
+            <FigureMarks.Provider value={marks}>
+              <Markdown text={d.draft ?? ""} />
+            </FigureMarks.Provider>
+          </div>
+          <ul className="sc-list">
+            {invented.map((t) => {
+              const v = nowVerified.get(t);
+              return (
+                <li key={t}>
+                  <span className="mono sc-fig">{t}</span>
+                  <span className="muted">no tool returned this</span>
+                  <span className={`sc-out${fixed.has(t) ? " ok" : ""}`}>
+                    {!fixed.has(t) ? "still unverified" : v ? `now verified from ${TOOL_NAMES[v.source_tool ?? ""] ?? v.source_tool}` : "removed"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
   const [showTrace, setShowTrace] = useState(false);
   const sources = useMemo(() => extractUrls(res.assistant_message), [res.assistant_message]);
@@ -108,6 +172,7 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
         {fixtureOnly && <p className="note warn"><AlertTriangle size={12} /> This answer used demo data, not live API results.</p>}
         {failed && <ErrorBanner title="The agent couldn't finish" message={res.error ?? "Unknown error"} />}
         {!failed && <DataUsed steps={res.steps} />}
+        {!failed && <SelfCorrection res={res} />}
         {res.assistant_message && (
           <div className="answer">
             <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
