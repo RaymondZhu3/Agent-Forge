@@ -28,7 +28,10 @@ from .cache import cache_get, cache_key, cache_set
 from .fixtures import serp_fixture
 
 ENDPOINT = "https://serpapi.com/search.json"
-TIMEOUT_S = 20
+TIMEOUT_S = 15
+# Last good result per search, kept for the life of the process (no TTL). If SerpApi times out or errors twice,
+# we serve this, still labeled cached, rather than failing the tool mid-demo.
+_last_good: dict[str, dict[str, Any]] = {}
 
 TTL = {
     "serpapi_shopping": 6 * 3600,
@@ -46,13 +49,24 @@ def _use_fixtures() -> bool:
     return not os.getenv("SERPAPI_KEY") or os.getenv("SERPAPI_MOCK") == "1"
 
 
-def _get(params: dict[str, Any]) -> httpx.Response:
+def _get_once(params: dict[str, Any]) -> httpx.Response:
     try:
         return httpx.get(ENDPOINT, params={**params, "api_key": os.environ["SERPAPI_KEY"]}, timeout=TIMEOUT_S)
     except httpx.TimeoutException:
         raise ToolError("SerpApi timed out")
     except httpx.HTTPError:
         raise ToolError("Could not reach SerpApi")
+
+
+def _get(params: dict[str, Any]) -> httpx.Response:
+    """One retry on a timeout, network error or SerpApi 5xx (seen live during the demo recording)."""
+    try:
+        res = _get_once(params)
+    except ToolError:
+        return _get_once(params)
+    if res.status_code >= 500:
+        return _get_once(params)
+    return res
 
 
 def _reason(res: httpx.Response) -> str:
@@ -76,6 +90,18 @@ def serp_request(tool_name: str, params: dict[str, Any]) -> tuple[dict[str, Any]
     if os.getenv("SERPAPI_CACHE_ONLY") == "1":
         raise ToolError("No cached result for this search (cache-only mode is on)")
 
+    try:
+        data = _live(params)
+    except ToolError:
+        if key in _last_good:
+            return _last_good[key], True, False
+        raise
+    cache_set(key, tool_name, data, TTL[tool_name])
+    _last_good[key] = data
+    return data, False, False
+
+
+def _live(params: dict[str, Any]) -> dict[str, Any]:
     res = _get(params)
     # Live 7:30 PM (web, Court Scout): the model passed location "UT Austin" -> HTTP 400 "Unsupported location".
     # SerpApi only accepts its canonical locations; retry once without it rather than failing the tool.
@@ -95,8 +121,7 @@ def serp_request(tool_name: str, params: dict[str, Any]) -> tuple[dict[str, Any]
             data = {}
         else:
             raise ToolError(f"SerpApi: {data['error']}")
-    cache_set(key, tool_name, data, TTL[tool_name])
-    return data, False, False
+    return data
 
 
 def _num(v: Any) -> float | None:
