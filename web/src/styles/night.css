@@ -16,8 +16,7 @@ body { font-family: var(--font); background: var(--bg); }
 .fig { font-family: var(--mono); font-size: 0.86em; font-weight: 500; padding: 1px 6px 1px 5px; border-radius: 5px; white-space: nowrap; border: 1px solid; }
 .fig.v { color: #7ff0bd; border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
 .fig.v::before { content: "✓ "; font-size: 0.85em; opacity: 0.8; }
-.fig.u { color: #fff; background: color-mix(in srgb, var(--err) 75%, transparent); border-color: transparent; }
-.fig.u::before { content: "! "; font-weight: 700; }
+.fig.u { color: #ffa3aa; background: color-mix(in srgb, var(--err) 12%, transparent); border: 1px dashed color-mix(in srgb, var(--err) 70%, transparent); }
 
 /* shared: remove decorative glows, map hard-coded blues to the variant accent */
 body::before { display: none; }
