@@ -368,3 +368,20 @@ def test_figures_store_their_evidence():
     assert paid["item"].get("date") == "2026-10-02"
     saving = figs["$59.01"][5]
     assert saving["kind"] == "difference" and {o["value"] for o in saving["operands"]} == {249.0, 189.99}
+
+
+
+def test_quick_quote_template_demonstrates_self_correction():
+    """Built-in self-correction demo: no price tool, so estimated prices are caught and sent back."""
+    from server.runtime.templates import QUICK_QUOTE, TEMPLATES
+
+    assert QUICK_QUOTE in TEMPLATES and {t.name for t in QUICK_QUOTE.tools} == {"serpapi_local_places"}
+    llm = ScriptedLLM(
+        LLMTurn("- Typical: $249.00\n- Recent low: $169.00\n- Good deal: under $179.00", []),
+        LLMTurn("I couldn't verify current or Black Friday prices: none of my tools return prices.", []),
+    )
+    r = run_agent(agent(QUICK_QUOTE), "What do AirPods Pro 2 usually cost?", llm=llm)
+    stages = [s.input["stage"] for s in r.steps if s.type == "verify"]
+    assert stages == ["draft", "corrected"]
+    assert set(r.steps[-1].output["fixed"]) == {"$249.00", "$169.00", "$179.00"}
+    assert "receipt" in r.steps[-1].output

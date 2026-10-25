@@ -31,7 +31,7 @@ export const relTime = (iso: string | null | undefined): string => {
 
 export const shortId = (id: string): string => (id.length > 14 ? id.slice(0, 14) : id);
 
-export const TEMPLATE_LABEL: Record<string, string> = { smart_spend: "Smart Spend", news_monitor: "News Monitor", blank: "Custom" };
+export const TEMPLATE_LABEL: Record<string, string> = { smart_spend: "Smart Spend", news_monitor: "News Monitor", quick_quote: "Quick Quote", blank: "Custom" };
 export const templateLabel = (t: string): string => TEMPLATE_LABEL[t] ?? t;
 
 export const uid = (prefix: string): string => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;

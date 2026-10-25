@@ -55,6 +55,24 @@ NEWS_MONITOR = AgentCreate(
     guardrails=Guardrails(read_only_financial_data=True, max_tool_calls=6, fact_check="flag"),
 )
 
+# Demo of self-correction: asked for specific prices but given no price tool, the model tends to state figures from
+# memory; the fact-check catches them and the platform sends them back to be sourced or removed.
+QUICK_QUOTE = AgentCreate(
+    name="Quick Quote",
+    template="quick_quote",
+    model=DEFAULT_MODEL,
+    instructions=(
+        "You give quick shopping price estimates.\n"
+        "1. For every product question, include specific dollar figures: the typical price, a recent low, and what "
+        "would count as a good deal.\n"
+        "2. If you haven't looked a price up, give your best estimate from general knowledge as a specific number.\n"
+        "3. Use local places only to say where the item can be bought nearby.\n"
+        "Keep it short: three bullets."
+    ),
+    tools=[ToolConfig(name="serpapi_local_places", settings={"location": "Austin, Texas"})],
+    guardrails=Guardrails(read_only_financial_data=True, max_tool_calls=3, fact_check="flag"),
+)
+
 BLANK = AgentCreate(
     name="New Agent",
     template="blank",
@@ -64,4 +82,4 @@ BLANK = AgentCreate(
     guardrails=Guardrails(),
 )
 
-TEMPLATES: list[AgentCreate] = [SMART_SPEND, NEWS_MONITOR, BLANK]
+TEMPLATES: list[AgentCreate] = [SMART_SPEND, NEWS_MONITOR, QUICK_QUOTE, BLANK]

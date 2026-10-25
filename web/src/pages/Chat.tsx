@@ -25,6 +25,10 @@ const SUGGESTIONS: Record<string, { label: string; text: string }[]> = {
     { label: "Review my subscriptions", text: "Which recurring bills and subscriptions am I paying for, and could any be cheaper?" },
     { label: "Check my recent purchases", text: "Am I overpaying for anything I bought recently? Compare prices." },
   ],
+  quick_quote: [
+    { label: "Black Friday price", text: "What do AirPods Pro 2 usually cost, and what's a good Black Friday price to wait for?" },
+    { label: "Is this a good deal?", text: "Is $199 a good price for a Nintendo Switch OLED? What do they usually sell for?" },
+  ],
   news_monitor: [
     { label: "NVIDIA & chips", text: "Brief me on NVIDIA and semiconductor supply chains." },
     { label: "AI regulation", text: "What are the most important recent stories on AI regulation?" },
