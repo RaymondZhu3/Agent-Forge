@@ -123,9 +123,12 @@ TRUSTED_RETAILERS = (
 )
 
 
-def _trusted(source: str | None) -> bool:
+def _trusted(source: str | None, query: str = "") -> bool:
+    """Major retailer, or the brand's own store (query "Logitech MX Master 3S" -> source "Logitech" / "logitech.com").
+    Marketplace sellers ("Walmart - 6AVE Electronics") count as the retailer they list on."""
     s = (source or "").lower()
-    return any(s.startswith(r) for r in TRUSTED_RETAILERS)
+    brand = (query.split() or [""])[0].lower()
+    return any(s.startswith(r) for r in TRUSTED_RETAILERS) or (len(brand) >= 3 and s.startswith(brand))
 
 
 def _not_comparable(query: str, r: dict[str, Any]) -> str | None:
@@ -162,7 +165,7 @@ def _shopping(input: dict[str, Any], settings: dict[str, Any]):
                 "price": _num(r.get("extracted_price")),
                 "price_text": r.get("price"),
                 "merchant": r.get("source"),
-                "trusted_retailer": _trusted(r.get("source")),
+                "trusted_retailer": _trusted(r.get("source"), input["query"]),
                 "rating": r.get("rating"),
                 "url": r.get("product_link") or r.get("link"),
             })

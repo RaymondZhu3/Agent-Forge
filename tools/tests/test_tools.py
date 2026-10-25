@@ -242,3 +242,15 @@ def test_shopping_with_everything_excluded_tells_the_model_to_refine(monkeypatch
     monkeypatch.setattr(serpapi, "serp_request", lambda *a, **k: (raw, False, False))
     data, _, _ = serpapi._shopping({"query": "AirPods Pro 2"}, {})
     assert data["products"] == [] and "full product name" in data["hint"]
+
+
+
+def test_brand_store_counts_as_trusted_retailer():
+    """Live 8:41 PM: 'Logitech MX Master 3S' at Logitech's own store ($79.99) wasn't trusted, so lowest_price
+    came from a marketplace seller instead."""
+    from tools import serpapi
+
+    assert serpapi._trusted("Logitech", "Logitech MX Master 3S")
+    assert serpapi._trusted("logitech.com", "Logitech MX Master 3S")
+    assert not serpapi._trusted("appstle.com", "Logitech MX Master 3S")
+    assert not serpapi._trusted("Logitech", "MX Master 3S mouse")  # brand must be in the query
