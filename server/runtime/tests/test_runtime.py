@@ -349,3 +349,22 @@ def test_block_mode_still_redacts_what_correction_left():
     r = run_agent(agent(fact_check="block"), "price?", llm=llm)
     assert r.blocked and "$149.00" not in r.assistant_message and "[unverified figure removed]" in r.assistant_message
     assert [s for s in r.steps if s.type == "verify"][-1].output["blocked"] is True
+
+
+
+def test_figures_store_their_evidence():
+    """Click-a-chip evidence: exact figures keep the record they matched; savings keep both operands."""
+    llm = ScriptedLLM(
+        LLMTurn("", [call("nessie_purchases"), call("serpapi_shopping", query="AirPods Pro 2")]),
+        LLMTurn("You paid $249.00 at Target. Amazon has $189.99. Potential savings: $249.00 - $189.99 = $59.01.", []),
+    )
+    r = run_agent(agent(), "Am I overpaying?", llm=llm)
+    figs = {f[0]: f for f in r.steps[-1].output["figures"]}
+    shop = figs["$189.99"][5]
+    assert shop["kind"] == "exact" and shop["tool"] == "serpapi_shopping" and shop["item"]["merchant"] == "Amazon.com"
+    paid = figs["$249.00"][5]
+    assert paid["tool"] == "nessie_purchases" and "AirPods" in paid["item"]["description"]
+    # the single purchase, not the by-merchant total that happens to equal it
+    assert paid["item"].get("date") == "2026-10-02"
+    saving = figs["$59.01"][5]
+    assert saving["kind"] == "difference" and {o["value"] for o in saving["operands"]} == {249.0, 189.99}

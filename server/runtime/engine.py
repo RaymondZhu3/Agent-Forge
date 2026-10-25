@@ -20,7 +20,7 @@ from tools.registry import registry as default_registry
 from .llm import LLM, FunctionCall, GeminiLLM, LLMError, LLMTurn
 from .receipt import chain as receipt_chain
 from .receipt import data_hash
-from .verify import USER_SOURCE, mark_user_figures, verify_answer
+from .verify import USER_SOURCE, explain_figures, mark_user_figures, verify_answer
 
 RUN_TIMEOUT_S = float(os.getenv("RUN_TIMEOUT_S", "90"))
 # Self-correction: when the model states figures no tool returned, send them back once to be sourced or removed.
@@ -329,8 +329,10 @@ def run_agent(
         "unverified": [c.text for c in claims if not c.verified], "blocked": blocked,
         "invented": [c.text for c in left], "user_supplied": [c.text for c in claims if c.source_tool == USER_SOURCE],
         **correction,
-        # The per-figure result, stored with the run (and covered by the receipt).
-        "figures": [[c.text, c.verified, c.source_tool, c.source_step, c.how] for c in claims],
+        # The per-figure result and its evidence (the record it matched, or the two figures it came from),
+        # stored with the run and covered by the receipt.
+        "figures": [[c.text, c.verified, c.source_tool, c.source_step, c.how, d]
+                    for c, d in zip(claims, _safe(explain_figures, chosen, tool_outputs) or [None] * len(claims))],
     }
     record = {"step": len(steps) + 1, "type": "verify", "tool_name": None, "input": {"mode": mode, "stage": stage},
               "output": out, "success": True, "error": None}

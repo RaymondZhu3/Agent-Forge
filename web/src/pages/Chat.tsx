@@ -3,7 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useParams } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
 import Markdown, { FigureHover, FigureMarks } from "../components/Markdown";
-import { describeFigure, figureMap, TOOL_NAMES, type FigureInfo } from "../lib/figures";
+import EvidenceCard from "../components/Evidence";
+import { describeFigure, figureMap, figureMapFromSteps, TOOL_NAMES, type FigureInfo } from "../lib/figures";
 import Receipt from "../components/Receipt";
 import ToolIcon from "../components/ToolIcon";
 import Trace, { stepLabel } from "../components/Trace";
@@ -15,7 +16,7 @@ import type { AgentConfig, ChatResponse, Claim, RunStep } from "../types";
 
 type Turn =
   | { kind: "user"; id: string; text: string }
-  | { kind: "agent"; id: string; res: ChatResponse }
+  | { kind: "agent"; id: string; res: ChatResponse; question?: string }
   | { kind: "error"; id: string; message: string; retryText: string };
 
 const SUGGESTIONS: Record<string, { label: string; text: string }[]> = {
@@ -193,15 +194,30 @@ function SelfCorrection({ res }: { res: ChatResponse }) {
   );
 }
 
-function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
+function AgentTurn({ res, agent, question }: { res: ChatResponse; agent: AgentConfig; question?: string }) {
   const [showTrace, setShowTrace] = useState(false);
   const sources = useMemo(() => extractUrls(res.assistant_message), [res.assistant_message]);
-  const answerMarks = useMemo(() => figureMap(res.claims), [res.claims]);
+  const answerMarks = useMemo(() => figureMapFromSteps(res.steps) ?? figureMap(res.claims), [res.steps, res.claims]);
   // Hover/focus a figure chip -> light up the tool card it came from, draw a line, explain it.
   const bodyRef = useRef<HTMLDivElement>(null);
   const [focus, setFocus] = useState<{ f: FigureInfo; el: HTMLElement } | null>(null);
   const onFigure = useCallback((f: FigureInfo | null, el: HTMLElement | null) => setFocus(f && el ? { f, el } : null), []);
-  const litStep = focus?.f.ok ? focus.f.step ?? null : null;
+  // Click a chip -> its evidence card stays open (Esc or a click elsewhere closes it).
+  const [pinned, setPinned] = useState<{ f: FigureInfo; el: HTMLElement } | null>(null);
+  const figureCtx = useMemo(() => ({
+    hover: onFigure,
+    pick: (f: FigureInfo, el: HTMLElement) => setPinned((p) => (p?.el === el ? null : { f, el })),
+  }), [onFigure]);
+  useEffect(() => {
+    if (!pinned) return;
+    const close = () => setPinned(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
+  }, [pinned]);
+  const shown = pinned ?? focus;
+  const litStep = shown?.f.ok ? shown.f.step ?? shown.f.evidence?.operands?.[0]?.step ?? null : null;
   // One orchestrated moment per new answer: figures are stamped in reading order while the counter ticks up.
   const answerRef = useRef<HTMLDivElement>(null);
   const [stampMs] = useState(() => (reducedMotion() ? 0 : Math.min(1500, 250 + 90 * res.claims.length)));
@@ -236,7 +252,7 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
         {res.assistant_message && (
           <div className="answer" ref={answerRef}>
             <FigureMarks.Provider value={answerMarks}>
-              <FigureHover.Provider value={onFigure}>
+              <FigureHover.Provider value={figureCtx}>
                 <Markdown text={res.assistant_message} cards={agent.template === "smart_spend"} stories={agent.template === "news_monitor"} />
               </FigureHover.Provider>
             </FigureMarks.Provider>
@@ -259,14 +275,18 @@ function AgentTurn({ res, agent }: { res: ChatResponse; agent: AgentConfig }) {
           <Link to={`/runs/${res.run_id}`} className="link-btn mono">{res.run_id}</Link>
         </div>
         {showTrace && <Trace steps={res.steps} compact />}
-        {focus && <FigureSource body={bodyRef.current} chip={focus.el} f={focus.f} />}
+        {shown && (
+          <FigureSource body={bodyRef.current} chip={shown.el} f={shown.f}>
+            {pinned ? <EvidenceCard text={pinned.el.textContent?.trim() ?? ""} f={pinned.f} question={question} onClose={() => setPinned(null)} /> : null}
+          </FigureSource>
+        )}
       </div>
     </div>
   );
 }
 
 /** Line from a figure chip to the "Data used" card it came from, plus a one-line explanation. */
-function FigureSource({ body, chip, f }: { body: HTMLDivElement | null; chip: HTMLElement; f: FigureInfo }) {
+function FigureSource({ body, chip, f, children }: { body: HTMLDivElement | null; chip: HTMLElement; f: FigureInfo; children?: React.ReactNode }) {
   const [geo, setGeo] = useState<{ x1: number; y1: number; x2: number; y2: number; w: number; h: number; tipX: number; tipY: number } | null>(null);
   useLayoutEffect(() => {
     if (!body) return;
@@ -278,7 +298,7 @@ function FigureSource({ body, chip, f }: { body: HTMLDivElement | null; chip: HT
       x1: c.left - b.left + c.width / 2, y1: c.top - b.top,
       x2: k ? k.left - b.left + k.width / 2 : 0, y2: k ? k.bottom - b.top : 0,
       w: b.width, h: b.height,
-      tipX: Math.min(Math.max(c.left - b.left + c.width / 2, 120), b.width - 120), tipY: c.bottom - b.top + 6,
+      tipX: Math.min(Math.max(c.left - b.left + c.width / 2, 170), b.width - 170), tipY: c.bottom - b.top + 6,
     });
   }, [body, chip, f]);
   if (!geo) return null;
@@ -293,9 +313,13 @@ function FigureSource({ body, chip, f }: { body: HTMLDivElement | null; chip: HT
           <circle cx={geo.x2} cy={geo.y2} r="3" />
         </svg>
       )}
-      <div className={`fig-tip${f.ok ? "" : " u"}`} style={{ left: geo.tipX, top: geo.tipY }} role="tooltip">
-        {describeFigure(f)}
-      </div>
+      {children ? (
+        <div className="ev-anchor" style={{ left: geo.tipX, top: geo.tipY }}>{children}</div>
+      ) : (
+        <div className={`fig-tip${f.ok ? "" : " u"}`} style={{ left: geo.tipX, top: geo.tipY }} role="tooltip">
+          {describeFigure(f)}
+        </div>
+      )}
     </>
   );
 }
@@ -370,7 +394,7 @@ export default function Chat() {
     setPending({ startedAt: Date.now() });
     try {
       const res = await api.chat(id, { message: msg, session_id: session.current, demo_user_id: "demo_user_01" }, ctl.signal);
-      setTurns((t) => [...t, { kind: "agent", id: res.run_id, res }]);
+      setTurns((t) => [...t, { kind: "agent", id: res.run_id, res, question: msg }]);
     } catch (e) {
       if ((e as Error).name === "AbortError") setTurns((t) => [...t, { kind: "error", id: uid("e"), message: "You stopped waiting. The server may still finish this run; it will appear in the run history.", retryText: msg }]);
       else setTurns((t) => [...t, { kind: "error", id: uid("e"), message: (e as Error).message, retryText: msg }]);
@@ -431,7 +455,7 @@ export default function Chat() {
           t.kind === "user" ? (
             <div key={t.id} className="turn user"><div className="bubble">{t.text}</div></div>
           ) : t.kind === "agent" ? (
-            <AgentTurn key={t.id} res={t.res} agent={a} />
+            <AgentTurn key={t.id} res={t.res} agent={a} question={t.question} />
           ) : (
             <div key={t.id} className="turn error-turn">
               <ErrorBanner title="Message failed" message={t.message} />

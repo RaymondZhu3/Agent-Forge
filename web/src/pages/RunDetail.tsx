@@ -2,25 +2,13 @@ import { ArrowLeft, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import Markdown, { FigureMarks } from "../components/Markdown";
 import Receipt from "../components/Receipt";
+import { figureMapFromSteps } from "../lib/figures";
 import Trace from "../components/Trace";
 import { ErrorBanner, ModeBadge, Skeleton, StatusPill, modeOf } from "../components/ui";
 import { api } from "../lib/api";
 import { fmtDateTime, fmtInt, fmtMs, fmtUsd } from "../lib/format";
 import { useAsync, useDocumentTitle } from "../lib/hooks";
-import type { DataMode, RunStep } from "../types";
-
-/** Per-figure fact-check results stored in the final verify step: [text, verified, source_tool, source_step, how]. */
-function figureMarks(steps: RunStep[]): Map<string, boolean> {
-  const m = new Map<string, boolean>();
-  for (let i = steps.length - 1; i >= 0; i--) {
-    const figs = (steps[i].output as { figures?: [string, boolean][] } | null)?.figures;
-    if (Array.isArray(figs)) {
-      for (const [text, ok] of figs) m.set(text, (m.get(text) ?? false) || ok);
-      break;
-    }
-  }
-  return m;
-}
+import type { DataMode } from "../types";
 
 export default function RunDetail() {
   const { id = "" } = useParams();
@@ -75,7 +63,7 @@ export default function RunDetail() {
           <section className="card">
             <div className="card-head"><h2>Answer</h2></div>
             {r.assistant_message ? (
-              <FigureMarks.Provider value={figureMarks(steps)}>
+              <FigureMarks.Provider value={figureMapFromSteps(steps)}>
                 <Markdown text={r.assistant_message} cards={agent.data?.template === "smart_spend"} stories={agent.data?.template === "news_monitor"} />
               </FigureMarks.Provider>
             ) : <p className="muted sm">{r.status === "running" ? "Still running…" : "No answer was produced."}</p>}

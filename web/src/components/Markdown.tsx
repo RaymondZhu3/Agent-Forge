@@ -18,7 +18,10 @@ const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\
 /** Fact-check result per figure as written ("$199.00" -> false or details). When provided, figures are marked. */
 export const FigureMarks = createContext<Map<string, boolean | FigureInfo> | null>(null);
 /** When provided, marked figures become focusable and report hover/focus (to light up their source). */
-export const FigureHover = createContext<((f: FigureInfo | null, el: HTMLElement | null) => void) | null>(null);
+export const FigureHover = createContext<{
+  hover: (f: FigureInfo | null, el: HTMLElement | null) => void;
+  pick: (f: FigureInfo, el: HTMLElement) => void;
+} | null>(null);
 const FIGURE = /\$\s?\d{1,3}(?:,\d{3})+(?:\.\d+)?|\$\s?\d+(?:\.\d+)?|(?<![\w.])\d+(?:\.\d+)?\s?%/g;
 
 function Figures({ text }: { text: string }) {
@@ -39,11 +42,14 @@ function Figures({ text }: { text: string }) {
         className={`fig ${f.ok ? "v" : "u"}${hover ? " live" : ""}`}
         title={hover ? undefined : why}
         tabIndex={hover ? 0 : undefined}
-        aria-label={hover ? `${m[0]}: ${why}` : undefined}
-        onMouseEnter={hover ? (e) => hover(f, e.currentTarget) : undefined}
-        onMouseLeave={hover ? () => hover(null, null) : undefined}
-        onFocus={hover ? (e) => hover(f, e.currentTarget) : undefined}
-        onBlur={hover ? () => hover(null, null) : undefined}
+        aria-label={hover ? `${m[0]}: ${why}. Press Enter for the evidence.` : undefined}
+        role={hover ? "button" : undefined}
+        onMouseEnter={hover ? (e) => hover.hover(f, e.currentTarget) : undefined}
+        onMouseLeave={hover ? () => hover.hover(null, null) : undefined}
+        onFocus={hover ? (e) => hover.hover(f, e.currentTarget) : undefined}
+        onBlur={hover ? () => hover.hover(null, null) : undefined}
+        onClick={hover ? (e) => { e.stopPropagation(); hover.pick(f, e.currentTarget); } : undefined}
+        onKeyDown={hover ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); hover.pick(f, e.currentTarget); } } : undefined}
       >
         {m[0]}
         {!hover && !f.ok && <span className="sr"> (no tool returned this figure)</span>}

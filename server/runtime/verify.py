@@ -27,6 +27,25 @@ class Evidence:
     value: float
     step: int
     tool: str
+    item: Any = None  # the record the number sits in (a listing, purchase, bill, search result)
+    field: str = ""
+
+
+# What an evidence card may show from a tool record: descriptive fields only, no ids or account numbers.
+ITEM_FIELDS = ("title", "name", "description", "merchant", "payee", "source", "seller", "price", "price_text", "amount",
+               "payment_amount", "lowest_price", "total_spent", "recurring_monthly_total", "purchase_date", "date",
+               "published", "snippet", "url", "link", "query")
+
+
+def trim_item(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    out = {}
+    for k in ITEM_FIELDS:
+        v = item.get(k)
+        if isinstance(v, (str, int, float)) and not isinstance(v, bool):
+            out[k] = v[:220] if isinstance(v, str) else v
+    return out or None
 
 
 # Only numbers under money-like keys count as evidence, so counts, days of month,
@@ -34,25 +53,25 @@ class Evidence:
 MONEY_KEY_RE = re.compile(r"price|amount|total|balance|cost|spent|saving|fee|payment|lowest|highest", re.I)
 
 
-def collect_numbers(data: Any, step: int, tool: str, out: list[Evidence], key: str = "") -> None:
+def collect_numbers(data: Any, step: int, tool: str, out: list[Evidence], key: str = "", parent: Any = None) -> None:
     if isinstance(data, bool) or data is None:
         return
     if isinstance(data, (int, float)):
         if MONEY_KEY_RE.search(key):
-            out.append(Evidence(float(data), step, tool))
+            out.append(Evidence(float(data), step, tool, parent, key))
     elif isinstance(data, str):
         if "$" in data:
             for m in MONEY_RE.finditer(data):
                 try:
-                    out.append(Evidence(float(m.group(1).replace(",", "")), step, tool))
+                    out.append(Evidence(float(m.group(1).replace(",", "")), step, tool, parent, key))
                 except ValueError:
                     pass
     elif isinstance(data, dict):
         for k, v in data.items():
-            collect_numbers(v, step, tool, out, str(k))
+            collect_numbers(v, step, tool, out, str(k), data)
     elif isinstance(data, (list, tuple)):
         for v in data:
-            collect_numbers(v, step, tool, out, key)
+            collect_numbers(v, step, tool, out, key, parent)
 
 
 SAVING_RE = re.compile(r"sav|=|differen|less|cheaper|lower", re.I)
@@ -70,10 +89,20 @@ def _sentence(text: str, start: int, end: int) -> str:
     return text[left:right].strip(" *-•\t")[:240]
 
 
-def _match(value: float, evidence: list[Evidence], percent: bool) -> tuple[Evidence | None, str | None]:
-    for e in evidence:
-        if abs(e.value - value) <= TOL:
-            return e, "exact"
+def _best_exact(value: float, evidence: list[Evidence]) -> Evidence | None:
+    """Exact match; when several records hold the same number, prefer a specific item (a listing, purchase, bill)
+    over a summary total ("spent at Amazon: $109.99"), so the evidence card can show what was actually bought."""
+    hits = [e for e in evidence if abs(e.value - value) <= TOL]
+    if not hits:
+        return None
+    specific = [e for e in hits if isinstance(e.item, dict) and any(e.item.get(k) for k in ("title", "name", "description", "payee"))]
+    return (specific or hits)[0]
+
+
+def _match(value: float, evidence: list[Evidence], percent: bool) -> tuple[Evidence | None, str | None, Evidence | None]:
+    e = _best_exact(value, evidence)
+    if e is not None:
+        return e, "exact", None
     if percent:
         for a in evidence:
             if a.value <= 0:
@@ -82,27 +111,27 @@ def _match(value: float, evidence: list[Evidence], percent: bool) -> tuple[Evide
                 if a is b:
                     continue
                 if abs((a.value - b.value) / a.value * 100 - value) <= 0.6:
-                    return a, "difference"
-        return None, None
+                    return a, "difference", b
+        return None, None, None
     for e in evidence:
         if abs(e.value * 12 - value) <= TOL * 12:
-            return e, "annualized"
+            return e, "annualized", None
     vals = evidence[:MAX_VALUES]
     for i, a in enumerate(vals):
         for b in vals[i + 1:]:
             if abs(abs(a.value - b.value) - value) <= TOL:
-                return a, "difference"
+                return a, "difference", b
             if abs(a.value + b.value - value) <= TOL:
-                return a, "sum"
+                return a, "sum", b
     # Yearly saving from a plan switch: ($24.99 - $7.99) x 12 = $204.00. Only between stated, verified figures.
     for i, a in enumerate(vals):
         for b in vals[i + 1:]:
             if abs(abs(a.value - b.value) * 12 - value) <= TOL * 12:
-                return a, "annualized"
-    return None, None
+                return a, "annualized", b
+    return None, None, None
 
 
-def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tuple[int, int]]]:
+def find_claims_detailed(answer: str, evidence: list[Evidence]) -> tuple[list[tuple[Claim, tuple[int, int]]], list[dict | None]]:
     """Two passes. 1) exact matches against tool data. 2) derived money figures (difference, sum, x12) only from
     figures the answer itself states AND that passed pass 1. Live bug: "$249 - $199 = $50" (with $199 made up)
     was "verified" because two unrelated purchases happened to sum to $50."""
@@ -118,10 +147,11 @@ def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tupl
 
     exact: dict[int, Evidence] = {}
     for i, (_, percent, value) in enumerate(hits):
-        ev = next((e for e in evidence if abs(e.value - value) <= TOL), None)
+        ev = _best_exact(value, evidence)
         if ev is not None:
             exact[i] = ev
     how_of = {i: "exact" for i in exact}
+    partner: dict[int, Evidence | None] = {}
 
     # A saving that also equals some unrelated tool number (a $5 purchase) should cite the prices it came from:
     # "$11.99/mo vs $6.99/mo = $5.00" is a difference, not "the $5 coffee". Live 5:42 PM bill-savings run.
@@ -144,22 +174,27 @@ def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tupl
                         best = (dist, x if a >= b else y)
         if best is not None:
             src = exact[best[1]]
-            exact[i] = Evidence(value, src.step, src.tool)
+            other = next((x for x in money if x not in (best[1], i) and hits[x][0].start() < m.start()
+                          and abs(abs(hits[best[1]][2] - hits[x][2]) - value) <= TOL), None)
+            partner[i] = exact[other] if other is not None else None
+            exact[i] = Evidence(value, src.step, src.tool, src.item, src.field)
             how_of[i] = "difference"
 
     stated: list[Evidence] = []
     for i, ev in exact.items():
         if not hits[i][1] and all(abs(x.value - ev.value) > TOL for x in stated):
-            stated.append(Evidence(hits[i][2], ev.step, ev.tool))
+            stated.append(Evidence(hits[i][2], ev.step, ev.tool, ev.item, ev.field))
 
     found: list[tuple[Claim, tuple[int, int]]] = []
+    details: list[dict | None] = []
     for i, (m, percent, value) in enumerate(hits):
         if i in exact:
-            ev, how = exact[i], how_of[i]
+            ev, how, other = exact[i], how_of[i], partner.get(i)
         elif percent:
-            ev, how = _match(value, evidence, True)
+            ev, how, other = _match(value, evidence, True)
         else:
-            ev, how = _match(value, stated, False)
+            ev, how, other = _match(value, stated, False)
+        details.append(_detail(ev, how, other))
         found.append((
             Claim(
                 text=m.group(0).strip(),
@@ -171,8 +206,36 @@ def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tupl
             ),
             (m.start(), m.end()),
         ))
-    found.sort(key=lambda c: c[1][0])
-    return found
+    order = sorted(range(len(found)), key=lambda k: found[k][1][0])
+    return [found[k] for k in order], [details[k] for k in order]
+
+
+def find_claims(answer: str, evidence: list[Evidence]) -> list[tuple[Claim, tuple[int, int]]]:
+    return find_claims_detailed(answer, evidence)[0]
+
+
+def _ref(e: Evidence) -> dict[str, Any]:
+    return {"value": e.value, "step": e.step, "tool": e.tool, "item": trim_item(e.item)}
+
+
+def _detail(ev: Evidence | None, how: str | None, other: Evidence | None) -> dict | None:
+    """Why a figure verified: the record it matched, or the two figures it was computed from."""
+    if ev is None:
+        return None
+    if how == "exact" or other is None:
+        d = {"kind": how or "exact", **_ref(ev)}
+        if how == "annualized":
+            d["op"] = "x12"
+        return d
+    return {"kind": how, "op": "+" if how == "sum" else ("-x12" if how == "annualized" else "-"), "operands": [_ref(ev), _ref(other)]}
+
+
+def explain_figures(answer: str, tool_outputs: Iterable[tuple[int, str, Any]]) -> list[dict | None]:
+    """Evidence per figure, in the same order as verify_answer's claims."""
+    evidence: list[Evidence] = []
+    for step, tool, data in tool_outputs:
+        collect_numbers(data, step, tool, evidence)
+    return find_claims_detailed(answer, evidence)[1]
 
 
 USER_SOURCE = "user_message"

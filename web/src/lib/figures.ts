@@ -1,5 +1,7 @@
 /** Fact-check result for one figure as written, used to mark it in the answer and explain where it came from. */
-export type FigureInfo = { ok: boolean; step?: number | null; tool?: string | null; how?: string | null };
+export type EvidenceRef = { value: number; step: number; tool: string; item?: Record<string, string | number> | null };
+export type Evidence = EvidenceRef & { kind: string; op?: string; operands?: EvidenceRef[] };
+export type FigureInfo = { ok: boolean; step?: number | null; tool?: string | null; how?: string | null; evidence?: Evidence | null };
 
 export const TOOL_NAMES: Record<string, string> = {
   nessie_purchases: "Nessie purchases", nessie_bills: "Nessie bills", nessie_accounts: "Nessie accounts",
@@ -29,3 +31,22 @@ export function figureMap(claims: { text: string; verified: boolean; source_step
   }
   return m;
 }
+
+type StepLike = { type: string; output?: unknown };
+
+/** Figure results with evidence, from the run's final verify step ([text, verified, tool, step, how, evidence]). */
+export function figureMapFromSteps(steps: StepLike[] | null | undefined): Map<string, FigureInfo> | null {
+  for (let i = (steps?.length ?? 0) - 1; i >= 0; i--) {
+    const figs = (steps![i].output as { figures?: unknown[][] } | null)?.figures;
+    if (!Array.isArray(figs)) continue;
+    const m = new Map<string, FigureInfo>();
+    for (const [text, ok, tool, step, how, evidence] of figs as [string, boolean, string | null, number | null, string | null, Evidence | null][]) {
+      const cur = m.get(text);
+      if (!cur || (!cur.ok && ok)) m.set(text, { ok, tool, step, how, evidence: evidence ?? null });
+    }
+    return m;
+  }
+  return null;
+}
+
+export const money = (v: number) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
