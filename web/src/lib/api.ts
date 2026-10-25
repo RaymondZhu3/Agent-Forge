@@ -49,6 +49,7 @@ export const api = {
   agent: (id: string) => request<AgentConfig>(`/agents/${id}`),
   createAgent: (body: AgentCreate) => request<AgentConfig>("/agents", { method: "POST", body: JSON.stringify(body) }),
   updateAgent: (id: string, body: AgentUpdate) => request<AgentConfig>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteAgent: (id: string) => request<{ deleted: string; runs_deleted: number; steps_deleted: number }>(`/agents/${id}`, { method: "DELETE" }),
   deploy: (id: string) => request<AgentConfig>(`/agents/${id}/deploy`, { method: "POST" }),
   chat: (id: string, body: ChatRequest, signal?: AbortSignal) =>
     request<ChatResponse>(`/agents/${id}/chat`, { method: "POST", body: JSON.stringify(body), signal }),

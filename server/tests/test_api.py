@@ -143,3 +143,22 @@ def test_db_tool_cache_respects_expiry(client):
     assert db_cache_get("k2") is None
     db_cache_set("k1", "serpapi_news", {"a": 3}, 3600)  # upsert
     assert db_cache_get("k1") == {"a": 3}
+
+
+def test_delete_agent_removes_runs_and_protects_demo_agents(client):
+    aid = client.post("/api/agents", json={
+        "name": "Temp", "template": "news_monitor", "instructions": "i",
+        "tools": [{"name": "serpapi_news", "settings": {}}],
+    }).json()["id"]
+    client.post(f"/api/agents/{aid}/deploy")
+    use_llm(ScriptedLLM(LLMTurn("", [FunctionCall("serpapi_news", {"query": "nvidia"}, "c1")], 10, 1), LLMTurn("Done.", [], 10, 1)))
+    run_id = client.post(f"/api/agents/{aid}/chat", json={"message": "news"}).json()["run_id"]
+    assert client.get(f"/api/runs/{run_id}").status_code == 200
+
+    res = client.delete(f"/api/agents/{aid}")
+    assert res.status_code == 200 and res.json()["deleted"] == aid and res.json()["runs_deleted"] == 1
+    assert client.get(f"/api/agents/{aid}").status_code == 404
+    assert client.get(f"/api/runs/{run_id}").status_code == 404
+    assert client.delete(f"/api/agents/{aid}").status_code == 404
+    assert client.delete("/api/agents/agent-smart-spend").status_code == 409
+    assert client.get("/api/agents/agent-smart-spend").status_code == 200

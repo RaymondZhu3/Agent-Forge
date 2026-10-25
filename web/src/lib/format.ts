@@ -57,3 +57,6 @@ export const hostOf = (url: string): string => {
     return url;
   }
 };
+
+/** Built-in demo agents; the server refuses to delete these (409), so the UI doesn't offer it. */
+export const PROTECTED_AGENT_IDS = new Set(["agent-smart-spend", "agent-news-monitor"]);

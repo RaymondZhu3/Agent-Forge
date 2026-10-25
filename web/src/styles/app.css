@@ -455,3 +455,8 @@ p.ok-t { display: flex; gap: 6px; align-items: center; font-size: 12.5px; }
 .story-why { color: #cfd5ec !important; }
 .story-link { display: inline-flex; gap: 6px; align-items: center; width: fit-content; font-size: 12.5px; font-weight: 550; color: var(--blue); padding: 4px 0; border-bottom: 1px solid rgba(91, 140, 255, 0.35); }
 .story-link:hover { color: #8fb0ff; }
+
+.btn.danger-solid { background: var(--err); border-color: transparent; color: #1b0a0d; }
+.btn.danger-solid:hover:not(:disabled) { background: #ff8592; }
+.modal.confirm { width: min(440px, 100%); }
+.btn.ghost.danger:hover:not(:disabled) { background: rgba(255, 107, 122, 0.08); border-color: rgba(255, 107, 122, 0.4); }

@@ -26,7 +26,7 @@ from server.schemas import (  # noqa: E402
     AgentConfig, AgentCreate, AgentUpdate, AnalyticsSummary, ChatRequest, ChatResponse, Guardrails, Run, RunStep,
     ToolAnalytics, ToolConfig,
 )
-from server.seed import seed_agents  # noqa: E402
+from server.seed import SEED_IDS, seed_agents  # noqa: E402
 from tools.base import ToolError, validate  # noqa: E402
 from tools.registry import registry  # noqa: E402
 
@@ -179,6 +179,19 @@ def update_agent(agent_id: str, body: AgentUpdate, s: Session = Depends(get_sess
     row.updated_at = utcnow()
     s.commit()
     return _to_config(row)
+
+
+@app.delete("/api/agents/{agent_id}")
+def delete_agent(agent_id: str, s: Session = Depends(get_session)):
+    row = _get_agent(s, agent_id)
+    if agent_id in SEED_IDS.values():
+        raise HTTPException(409, "The built-in demo agents can't be deleted.")
+    run_ids = [r.id for r in s.query(RunRow.id).filter(RunRow.agent_id == agent_id)]
+    steps = s.query(RunStepRow).filter(RunStepRow.run_id.in_(run_ids)).delete(synchronize_session=False) if run_ids else 0
+    runs = s.query(RunRow).filter(RunRow.agent_id == agent_id).delete(synchronize_session=False)
+    s.delete(row)
+    s.commit()
+    return {"deleted": agent_id, "runs_deleted": runs, "steps_deleted": steps}
 
 
 @app.post("/api/agents/{agent_id}/deploy", response_model=AgentConfig)

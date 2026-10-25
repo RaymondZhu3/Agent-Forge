@@ -63,6 +63,7 @@ Default hooks/cache are in-memory, so each side can run without the other.
 | POST | `/api/agents` | `AgentCreate` | `AgentConfig` (status `draft`) |
 | GET | `/api/agents/{id}` | – | `AgentConfig` |
 | PATCH | `/api/agents/{id}` | `AgentUpdate` | `AgentConfig` (version + 1) |
+| DELETE | `/api/agents/{id}` | – | `{ "deleted": id, "runs_deleted": n, "steps_deleted": n }` (also removes the agent's runs; 409 for the built-in demo agents `agent-smart-spend` / `agent-news-monitor`) |
 | POST | `/api/agents/{id}/deploy` | – | `AgentConfig` (status `deployed`, `deployed_at` set) |
 | POST | `/api/agents/{id}/chat` | `ChatRequest` | `ChatResponse` |
 | GET | `/api/runs?agent_id=&limit=50` | – | `Run[]` (no steps) |

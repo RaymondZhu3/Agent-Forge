@@ -2,10 +2,11 @@ import { AlertTriangle, ArrowRight, Check, ChevronDown, Cpu, Loader2, Rocket, Se
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
+import ConfirmDialog from "../components/ConfirmDialog";
 import ToolIcon from "../components/ToolIcon";
 import { EmptyState, ErrorBanner, ModeBadge, Skeleton, StatusPill } from "../components/ui";
 import { api } from "../lib/api";
-import { templateLabel } from "../lib/format";
+import { PROTECTED_AGENT_IDS, templateLabel } from "../lib/format";
 import { useAsync, useDocumentTitle, useMediaQuery } from "../lib/hooks";
 import type { AgentConfig, AgentCreate, Guardrails, ToolConfig, ToolMetadata } from "../types";
 
@@ -115,6 +116,9 @@ export default function Builder() {
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [celebrate, setCelebrate] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [delError, setDelError] = useState<string | null>(null);
   const initFor = useRef<string | null>(null);
 
   const templateParam = params.get("template") ?? "blank";
@@ -215,6 +219,13 @@ export default function Builder() {
     }
   };
 
+  const doDelete = async () => {
+    if (!saved) return;
+    setDeleting(true); setDelError(null);
+    try { await api.deleteAgent(saved.id); setBaseline(draft); nav("/", { replace: true }); }
+    catch (e) { setDelError((e as Error).message); setDeleting(false); }
+  };
+
   const status = phase === "deploying" || phase === "saving" ? "deploying" : phase === "error" ? "error" : saved?.status ?? "draft";
   const busy = phase === "saving" || phase === "deploying";
 
@@ -297,6 +308,9 @@ export default function Builder() {
                 </div>
               </div>
             </Section>
+            {saved && !PROTECTED_AGENT_IDS.has(saved.id) && (
+              <button className="btn ghost danger" onClick={() => { setDelError(null); setConfirmDel(true); }}><Trash2 size={14} /> Delete agent</button>
+            )}
           </aside>
         )}
 
@@ -440,6 +454,10 @@ export default function Builder() {
           </aside>
         )}
       </div>
+      {confirmDel && saved && (
+        <ConfirmDialog title={`Delete ${saved.name}?`} confirmLabel="Delete agent" busy={deleting} error={delError} onCancel={() => setConfirmDel(false)} onConfirm={doDelete}
+          body="This permanently removes the agent and all of its runs and traces. Observability numbers will change. This can't be undone." />
+      )}
     </div>
   );
 }

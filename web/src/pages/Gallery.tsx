@@ -1,11 +1,12 @@
-import { ArrowRight, Eye, MessageSquare, PenTool, Plus, Settings2, X } from "lucide-react";
+import { ArrowRight, Eye, MessageSquare, PenTool, Plus, Settings2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AgentAvatar from "../components/AgentAvatar";
+import ConfirmDialog from "../components/ConfirmDialog";
 import ToolIcon from "../components/ToolIcon";
 import { EmptyState, ErrorBanner, Skeleton, StatusPill } from "../components/ui";
 import { api } from "../lib/api";
-import { relTime, templateLabel } from "../lib/format";
+import { PROTECTED_AGENT_IDS, relTime, templateLabel } from "../lib/format";
 import { useAsync, useDocumentTitle } from "../lib/hooks";
 import type { AgentConfig, AgentCreate, ToolMetadata } from "../types";
 
@@ -56,7 +57,7 @@ function TemplatePreview({ tpl, tools, onClose }: { tpl: AgentCreate; tools: Too
   );
 }
 
-function AgentRow({ a }: { a: AgentConfig }) {
+function AgentRow({ a, onDelete }: { a: AgentConfig; onDelete: (a: AgentConfig) => void }) {
   return (
     <li className="agent-card">
       <AgentAvatar seed={a.id} size={44} />
@@ -76,6 +77,7 @@ function AgentRow({ a }: { a: AgentConfig }) {
         </div>
       </div>
       <div className="agent-card-actions">
+        {!PROTECTED_AGENT_IDS.has(a.id) && <button className="btn ghost sm danger" onClick={() => onDelete(a)} aria-label={`Delete ${a.name}`}><Trash2 size={13} /></button>}
         <Link to={`/builder/${a.id}`} className="btn ghost sm"><Settings2 size={13} /> Configure</Link>
         {a.status === "deployed" ? (
           <Link to={`/chat/${a.id}`} className="btn primary sm"><MessageSquare size={13} /> Open chat</Link>
@@ -93,6 +95,16 @@ export default function Gallery() {
   const templates = useAsync(() => api.templates(), []);
   const tools = useAsync(() => api.tools(), []);
   const [preview, setPreview] = useState<AgentCreate | null>(null);
+  const [toDelete, setToDelete] = useState<AgentConfig | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [delError, setDelError] = useState<string | null>(null);
+  const confirmDelete = async () => {
+    if (!toDelete) return;
+    setDeleting(true); setDelError(null);
+    try { await api.deleteAgent(toDelete.id); setToDelete(null); agents.reload(); }
+    catch (e) { setDelError((e as Error).message); }
+    finally { setDeleting(false); }
+  };
 
   return (
     <div className="page">
@@ -122,7 +134,7 @@ export default function Gallery() {
             Start from a template below or build one from scratch.
           </EmptyState>
         )}
-        {agents.data && agents.data.length > 0 && <ul className="agent-list">{agents.data.map((a) => <AgentRow key={a.id} a={a} />)}</ul>}
+        {agents.data && agents.data.length > 0 && <ul className="agent-list">{agents.data.map((a) => <AgentRow key={a.id} a={a} onDelete={(x) => { setDelError(null); setToDelete(x); }} />)}</ul>}
       </section>
 
       <section>
@@ -155,6 +167,10 @@ export default function Gallery() {
           })}
         </div>
       </section>
+      {toDelete && (
+        <ConfirmDialog title={`Delete ${toDelete.name}?`} confirmLabel="Delete agent" busy={deleting} error={delError} onCancel={() => setToDelete(null)} onConfirm={confirmDelete}
+          body="This permanently removes the agent and all of its runs and traces. Observability numbers will change. This can't be undone." />
+      )}
       {preview && <TemplatePreview tpl={preview} tools={tools.data ?? []} onClose={() => setPreview(null)} />}
     </div>
   );
