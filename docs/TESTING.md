@@ -30,6 +30,8 @@ npm run dev
 
 Open http://localhost:5173.
 
+**Signed receipts:** set `RECEIPT_SECRET` in the server's `.env` (your laptop for local testing, and Vultr for the real demo) to a long random string. Generate one with `python -c "import secrets; print(secrets.token_hex(32))"`. Never commit it. Without it, receipts still work but show no "Signed" badge.
+
 **Before you start:** `python -m tools.check_keys --latency --write` picks the Gemini model that's answering fastest right now. If it changes, Vultr's `.env` needs the same `GEMINI_MODEL` and a restart.
 
 Gemini calls cost a little on the billed key (well under a cent per chat); the stress test is the expensive one (~25 calls).
@@ -86,6 +88,15 @@ If there's no strip, Gemini didn't guess this time. That isn't a bug. Ask again 
 - [ ] Open any run: answer shows chips; **Audit receipt → Verify record → "Record intact"**; **Show the fingerprint chain** lists every step.
 - [ ] Dashboard → **Audit the last 25 runs** → "N of N receipts intact" (older runs from before receipts are counted separately).
 - [ ] CLI check of one run: `python -m server.runtime.receipt RUN_ID --api http://144.202.28.129:8000` → `OK Record intact…`
+
+## 8b. Replay (the fallback if Gemini is down)
+- [ ] Chat header → **Replay** → pick a recorded run. It appears with a yellow banner, "Replay of a recorded run from … This is not a live answer," plus the same chips, evidence, self-correction and receipt.
+- [ ] A failed message offers **Replay a recorded run** next to Try again.
+- [ ] Before judging, make sure each demo agent has at least one good recorded run (the $59 question, bill savings, and a Quick Quote run that self-corrected).
+
+## 8c. Signed receipts (needs `RECEIPT_SECRET` on the server)
+- [ ] New answers show a **Signed** badge on the receipt. **Verify record** adds "Signature valid (server key …)".
+- [ ] `curl http://localhost:8000/api/runs/RUN_ID/verify` (or the Vultr address) returns `"signature": "valid"`.
 
 ## 9. Builder: describe an agent (experimental)
 - [ ] Builder → new agent → "Describe your agent in one sentence": `Finds tennis courts near UT Austin and compares racquet prices` → **Draft it**.
